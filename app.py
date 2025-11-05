@@ -63,6 +63,7 @@ def load_data():
 
     # Extract month and year for analysis
     data['month'] = data['Start Month']
+    data['month_name'] = data['date'].dt.month_name()   # new readable month label
     data['year'] = data['Start Year']
 
     # Calculate event duration in days
@@ -387,60 +388,71 @@ st.markdown("---")
 # ============================================================================
 # Q2 & Q3: SEASONAL PATTERNS AND TRENDS
 # ============================================================================
+
 col1, col2 = st.columns(2)
 
 with col1:
     st.subheader("Q2: When Should We Prepare for Seasonal Surges?")
 
-    # Group by month and event_type
-    seasonal_data = filtered_data.groupby(['month', 'event_type']).agg({
-        'event_id': 'count',
-        'severity': 'mean',
-        'economic_impact_million_usd': 'sum'
-    }).reset_index()
+    # Prepare seasonal dataset
+    seasonal_data = filtered_data.groupby(['month', 'event_type']).agg(
+        count=('event_id', 'count')
+    ).reset_index()
 
-    seasonal_data.rename(columns={'event_id': 'count'}, inplace=True)
+    # ✅ Filter to major climate-relevant event types (Q2 only)
+    key_events = ['Hurricane', 'Flood', 'Heatwave', 'Wildfire', 'Drought']
+    seasonal_data = seasonal_data[seasonal_data['event_type'].isin(key_events)]
 
+    # Ensure months are sorted correctly
+    month_order = [1,2,3,4,5,6,7,8,9,10,11,12]
+    seasonal_data['month'] = pd.Categorical(seasonal_data['month'], month_order)
+
+    # Line chart: Monthly event frequency by type
+    fig_season = px.line(
+        seasonal_data,
+        x='month',
+        y='count',
+        color='event_type',
+        markers=True,
+        labels={'month': 'Month', 'count': 'Number of Events', 'event_type': 'Event Type'},
+        title=f"Seasonal Patterns of Climate Events - {st.session_state.selected_country}"
+    )
+
+    fig_season.update_traces(line=dict(width=2))
+    fig_season.update_layout(
+    height=420,
+    template="plotly_white",
+    colorway=[
+        "#0068A5",  # Flood - deep blue
+        "#D62728",  # Heatwave - strong red
+        "#4CAF50",  # Landslide - green
+        "#FF7F0E",  # Wildfire - orange
+        "#8C6BB1",  # Drought - muted purple
+        "#1F77B4",  # Hurricane - ocean blue
+    ],
+    xaxis=dict(
+        tickmode='array',
+        tickvals=month_order,
+        ticktext=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+    ),
+    yaxis_title="Number of Recorded Events",
+)
+
+    st.plotly_chart(fig_season, width="stretch")
+
+    # Insight text block
     if len(seasonal_data) > 0:
-        # Create pivot table for heatmap
-        heatmap_data = seasonal_data.pivot_table(
-            index='event_type',
-            columns='month',
-            values='count',
-            fill_value=0
-        )
+        highest_peak = seasonal_data.sort_values('count', ascending=False).iloc[0]
+        peak_month = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][int(highest_peak['month'])-1]
 
-        # Create heatmap using Plotly
-        fig_heatmap = go.Figure(data=go.Heatmap(
-            z=heatmap_data.values,
-            x=['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
-            y=heatmap_data.index,
-            colorscale='Blues',
-            hovertemplate='<b>%{y}</b><br>Month: %{x}<br>Events: %{z}<extra></extra>'
-        ))
+        st.info(f"""
+        ### Seasonal Insight  
+        The data shows a clear seasonal pattern.  
+        **{highest_peak['event_type']}** events reach their highest frequency in **{peak_month}**,  
+        with **{int(highest_peak['count'])} recorded occurrences** during this month.  
 
-        fig_heatmap.update_layout(
-            title=f'Seasonal Risk Calendar - {st.session_state.selected_country}',
-            xaxis_title='Month',
-            yaxis_title='Event Type',
-            height=400
-        )
-
-        st.plotly_chart(fig_heatmap, use_container_width=True)
-
-        # Insight callout
-        if len(seasonal_data) > 0:
-            top_risks = seasonal_data.nlargest(3, 'count')
-            month_names = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-            st.info(f"""
-            ⚠️ **HIGH RISK PERIODS:**
-            - **{top_risks.iloc[0]['event_type']}** peaks in {month_names[int(top_risks.iloc[0]['month'])]} ({int(top_risks.iloc[0]['count'])} events)
-            - **{top_risks.iloc[1]['event_type']}** peaks in {month_names[int(top_risks.iloc[1]['month'])]} ({int(top_risks.iloc[1]['count'])} events)
-            - **{top_risks.iloc[2]['event_type']}** peaks in {month_names[int(top_risks.iloc[2]['month'])]} ({int(top_risks.iloc[2]['count'])} events)
-            """)
-    else:
-        st.warning("No seasonal data available for the selected filters.")
-
+        This period may require **increased preparedness**, resource planning, and early monitoring interventions.
+        """)
 with col2:
     st.subheader("Q3: Are Key Perils Becoming More Frequent or Costly?")
 
