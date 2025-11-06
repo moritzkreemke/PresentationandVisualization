@@ -154,15 +154,38 @@ if 'selected_month' not in st.session_state:
     st.session_state.selected_month = None
 
 # Header
-st.markdown('<div class="main-header">🏠 CIAOO EUROSHIELD CLIMATE RISK DASHBOARD</div>', unsafe_allow_html=True)
+st.markdown('<div class="main-header">🏠 EUROSHIELD CLIMATE RISK DASHBOARD</div>', unsafe_allow_html=True)
 st.markdown(
     f'<div class="sub-header">Last Updated: {datetime.now().strftime("%B %Y")} | Data Source: EM-DAT International Disaster Database</div>',
     unsafe_allow_html=True)
 
 # Get available years from data
 available_years = sorted(data['year'].dropna().unique())
-min_year = int(available_years[0]) if len(available_years) > 0 else 1950
-max_year = int(available_years[-1]) if len(available_years) > 0 else 2025
+min_year = 2020
+max_year = 2022
+
+# Filtra i dati solo per il periodo COVID
+filtered_data = merged_data[
+    (merged_data['year'] >= min_year) & (merged_data['year'] <= max_year)
+].copy()
+
+st.info(f"🦠 Showing only COVID period data ({min_year}–{max_year})")
+
+# (Se vuoi anche aggiornare lo slider ma mantenerlo disabilitato, puoi fare così:)
+st.select_slider(
+    "Year Range (fixed to COVID period)",
+    options=[2020, 2021, 2022],
+    value=(2020, 2022),
+    disabled=True
+)
+
+
+
+
+
+
+
+
 
 # Top filter bar
 col_f1, col_f2, col_f3, col_f4 = st.columns([2, 2, 2, 1])
@@ -287,102 +310,100 @@ st.markdown("---")
 # ============================================================================
 # Q1: WHERE ARE OUR GREATEST FINANCIAL RISKS FROM CLIMATE EVENTS?
 # ============================================================================
+
 st.header("Q1: Where Are Our Greatest Financial Risks from Climate Events?")
 
-# Prepare data for the map
-map_data = filtered_data.groupby('country').agg({
-    'severity': 'mean',
-    'event_id': 'count',
-    'Total Deaths': 'sum',
-    'Total Affected': 'sum',
-    'economic_impact_million_usd': 'sum'
-}).reset_index()
-
-map_data.rename(columns={
-    'severity': 'average_severity',
-    'event_id': 'total_events'
-}, inplace=True)
-
-# Merge with portfolio data
-map_data = pd.merge(map_data, portfolio, on='country', how='inner')
-
-# Add coordinates
-map_data['lat'] = map_data['country'].map(lambda c: country_centroids.get(c, {}).get('lat'))
-map_data['lon'] = map_data['country'].map(lambda c: country_centroids.get(c, {}).get('lon'))
-map_data = map_data.dropna(subset=['lat', 'lon'])
-
-if len(map_data) > 0:
-    # Normalize bubble sizes based on Total Insured Value
-    size_scale = 50000
-    map_data['radius'] = (map_data['total_insured_value_eur_billion'] / map_data[
-        'total_insured_value_eur_billion'].max()) * size_scale + 10000
-
-    # Color by severity (green to red gradient)
-    sev = map_data['average_severity']
-    sev_norm = (sev - sev.min()) / (sev.max() - sev.min() + 1e-9)
-    map_data['r'] = (sev_norm * 255).astype(int)
-    map_data['g'] = (255 - (sev_norm * 255)).astype(int)
-    map_data['b'] = 80
-
-    # Create PyDeck layer
-    layer = pdk.Layer(
-        'ScatterplotLayer',
-        data=map_data,
-        get_position='[lon, lat]',
-        get_radius='radius',
-        get_fill_color='[r, g, b, 180]',
-        pickable=True,
-        auto_highlight=True
-    )
-
-    # View state centered on Europe
-    view_state = pdk.ViewState(
-        latitude=54.0,
-        longitude=10.0,
-        zoom=3.5,
-        pitch=0,
-        bearing=0
-    )
-
-    # Tooltip
-    tooltip = {
-        "html": """
-        <b>{country}</b><br/>
-        ─────────────────────────<br/>
-        Avg. Event Severity: {average_severity:.1f}/10<br/>
-        Total Events: {total_events}<br/>
-        Total Deaths: {Total Deaths:,.0f}<br/>
-        People Affected: {Total Affected:,.0f}<br/>
-        Economic Impact: ${economic_impact_million_usd:,.0f}M<br/>
-        <br/>
-        <b>EuroShield Portfolio:</b><br/>
-        Policies: {policy_count:,}<br/>
-        Total Insured Value: €{total_insured_value_eur_billion:.1f}B<br/>
-        Annual Premium: €{annual_premium_eur_million:.1f}M<br/>
-        Market Share: {market_share_percent:.1f}%
-        """,
-        "style": {
-            "backgroundColor": "#1f4788",
-            "color": "white",
-            "fontSize": "12px",
-            "padding": "10px"
-        }
-    }
-
-    # Display map
-    st.pydeck_chart(pdk.Deck(
-        layers=[layer],
-        initial_view_state=view_state,
-        tooltip=tooltip,
-        map_style='light'
-    ), use_container_width=True)
-
-    st.caption(
-        "💡 **Bubble size** represents Total Insured Value | **Color intensity** represents Average Event Severity (green=low, red=high)")
+# --- Fix the 'year' column (force numeric integers) ---
+if "year" in filtered_data.columns:
+    filtered_data["year"] = pd.to_numeric(filtered_data["year"], errors="coerce").astype("Int64")
 else:
-    st.warning("No data available for the selected filters.")
+    st.error("Column 'year' not found in dataset.")
+    st.stop()
 
-st.markdown("---")
+# Debug (you can remove this after testing)
+st.write("✅ Year range in data:", filtered_data["year"].min(), "→", filtered_data["year"].max())
+
+# --- Filter only COVID years (2020–2022) ---
+covid_data = filtered_data[(filtered_data["year"] >= 2020) & (filtered_data["year"] <= 2022)]
+st.write("📊 COVID period events:", len(covid_data))  # show count of events
+
+if covid_data.empty:
+    st.warning("⚠️ No events found for 2020–2022. Check if your 'year' values are correct.")
+else:
+    # --- Prepare map ---
+    def prepare_map(df):
+        df_agg = df.groupby('country').agg({
+            'severity': 'mean',
+            'event_id': 'count',
+            'Total Deaths': 'sum',
+            'Total Affected': 'sum',
+            'economic_impact_million_usd': 'sum'
+        }).reset_index()
+
+        df_agg.rename(columns={'severity': 'average_severity', 'event_id': 'total_events'}, inplace=True)
+        df_agg = pd.merge(df_agg, portfolio, on='country', how='inner')
+
+        df_agg['lat'] = df_agg['country'].map(lambda c: country_centroids.get(c, {}).get('lat'))
+        df_agg['lon'] = df_agg['country'].map(lambda c: country_centroids.get(c, {}).get('lon'))
+        df_agg = df_agg.dropna(subset=['lat', 'lon'])
+
+        if df_agg['total_insured_value_eur_billion'].max() > 0:
+            df_agg['radius'] = (
+                df_agg['total_insured_value_eur_billion'] / df_agg['total_insured_value_eur_billion'].max()
+            ) * 50000 + 10000
+        else:
+            df_agg['radius'] = 20000
+
+        return df_agg
+
+    covid_map = prepare_map(covid_data)
+
+    if not covid_map.empty:
+        # Color by severity
+        sev = covid_map['average_severity'].fillna(0)
+        sev_norm = (sev - sev.min()) / (sev.max() - sev.min() + 1e-9)
+        covid_map['r'] = (30 + sev_norm * 200).astype(int)
+        covid_map['g'] = (80 - sev_norm * 50).astype(int)
+        covid_map['b'] = (255 - sev_norm * 180).astype(int)
+
+        layer_covid = pdk.Layer(
+            "ScatterplotLayer",
+            data=covid_map,
+            get_position='[lon, lat]',
+            get_radius='radius',
+            get_fill_color='[r, g, b, 240]',
+            pickable=True,
+            auto_highlight=True,
+        )
+
+        view_state = pdk.ViewState(latitude=54.0, longitude=10.0, zoom=3.5)
+
+        tooltip = {
+            "html": """
+            <b>{country}</b><br/>
+            ─────────────────────────<br/>
+            Avg. Event Severity: {average_severity:.1f}/10<br/>
+            Total Events: {total_events}<br/>
+            Total Deaths: {Total Deaths:,.0f}<br/>
+            People Affected: {Total Affected:,.0f}<br/>
+            Economic Impact: ${economic_impact_million_usd:,.0f}M
+            """,
+            "style": {"backgroundColor": "#1f4788", "color": "white"}
+        }
+
+        st.pydeck_chart(pdk.Deck(
+            layers=[layer_covid],
+            initial_view_state=view_state,
+            tooltip=tooltip,
+            map_style="light",
+        ), use_container_width=True)
+
+        st.caption("💡 Showing only events during **COVID period (2020–2022)**. Bubble color = severity, size = insured value.")
+    else:
+        st.warning("No map data available for 2020–2022.")
+
+
+
 
 # ============================================================================
 # Q2 & Q3: SEASONAL PATTERNS AND TRENDS
