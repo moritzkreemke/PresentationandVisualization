@@ -394,65 +394,68 @@ col1, col2 = st.columns(2)
 with col1:
     st.subheader("Q2: When Should We Prepare for Seasonal Surges?")
 
-    # Prepare seasonal dataset
-    seasonal_data = filtered_data.groupby(['month', 'event_type']).agg(
-        count=('event_id', 'count')
-    ).reset_index()
+    # Keep only climate-relevant perils
+    key_events = ['Flood', 'Heatwave', 'Wildfire', 'Drought', 'Hurricane']
+    seasonal_data = filtered_data[filtered_data['event_type'].isin(key_events)]
 
-    # ✅ Filter to major climate-relevant event types (Q2 only)
-    key_events = ['Hurricane', 'Flood', 'Heatwave', 'Wildfire', 'Drought']
-    seasonal_data = seasonal_data[seasonal_data['event_type'].isin(key_events)]
-
-    # Ensure months are sorted correctly
-    month_order = [1,2,3,4,5,6,7,8,9,10,11,12]
-    seasonal_data['month'] = pd.Categorical(seasonal_data['month'], month_order)
-
-    # Line chart: Monthly event frequency by type
-    fig_season = px.line(
-        seasonal_data,
-        x='month',
-        y='count',
-        color='event_type',
-        markers=True,
-        labels={'month': 'Month', 'count': 'Number of Events', 'event_type': 'Event Type'},
-        title=f"Seasonal Patterns of Climate Events - {st.session_state.selected_country}"
+    # Aggregate monthly frequencies
+    monthly_counts = (
+        seasonal_data.groupby(['month', 'event_type'])
+        .size()
+        .reset_index(name='count')
     )
 
-    fig_season.update_traces(line=dict(width=2))
+    #  Smooth noise (rolling mean helps reveal seasonality)
+    monthly_counts['count_smooth'] = monthly_counts.groupby('event_type')['count'].transform(
+        lambda x: x.rolling(window=2, min_periods=1).mean()
+    )
+
+    #  Month labels
+    month_order = list(range(1, 12+1))
+    month_names = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+
+    # Plot with semantic, color-blind-safe palette
+    fig_season = px.line(
+        monthly_counts,
+        x='month',
+        y='count_smooth',
+        color='event_type',
+        markers=True,
+        labels={'month':'Month', 'count_smooth':'Number of Events (Smoothed)', 'event_type':'Event Type'},
+        title=f"Seasonal Patterns of Climate Events - {st.session_state.selected_country}",
+        color_discrete_map={
+            'Flood': '#1f78b4',     # Blue
+            'Heatwave': '#e31a1c',  # Red
+            'Wildfire': '#ff7f00',  # Orange
+            'Drought': '#b15928',   # Brown
+            'Hurricane': '#6a3d9a', # Purple
+            'Landslide': '#33a02c'  # Green
+        }
+    )
+    
     fig_season.update_layout(
-    height=420,
-    template="plotly_white",
-    colorway=[
-        "#0068A5",  # Flood - deep blue
-        "#D62728",  # Heatwave - strong red
-        "#4CAF50",  # Landslide - green
-        "#FF7F0E",  # Wildfire - orange
-        "#8C6BB1",  # Drought - muted purple
-        "#1F77B4",  # Hurricane - ocean blue
-    ],
-    xaxis=dict(
-        tickmode='array',
-        tickvals=month_order,
-        ticktext=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
-    ),
-    yaxis_title="Number of Recorded Events",
-)
+        height=400,
+        template="simple_white",
+        xaxis=dict(
+            tickmode='array',
+            tickvals=month_order,
+            ticktext=month_names
+        )
+    )
 
     st.plotly_chart(fig_season, width="stretch")
 
-    # Insight text block
-    if len(seasonal_data) > 0:
-        highest_peak = seasonal_data.sort_values('count', ascending=False).iloc[0]
-        peak_month = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][int(highest_peak['month'])-1]
+    # ✅ Insight text (automatically updates when filters change)
+    if len(monthly_counts) > 0:
+        top = monthly_counts.sort_values('count', ascending=False).iloc[0]
+        peak_month = month_names[int(top['month']) - 1]
 
         st.info(f"""
-        ### Seasonal Insight  
-        The data shows a clear seasonal pattern.  
-        **{highest_peak['event_type']}** events reach their highest frequency in **{peak_month}**,  
-        with **{int(highest_peak['count'])} recorded occurrences** during this month.  
-
-        This period may require **increased preparedness**, resource planning, and early monitoring interventions.
+        **Seasonal Insight:**  
+        • **{top['event_type']}** peaks in **{peak_month}**  
+        • with **{int(top['count'])} recorded events historically**
         """)
+
 with col2:
     st.subheader("Q3: Are Key Perils Becoming More Frequent or Costly?")
 
