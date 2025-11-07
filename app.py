@@ -129,7 +129,7 @@ st.markdown("---")
 st.markdown('<div class="big-button">', unsafe_allow_html=True)
 col1, col2, col3 = st.columns([1, 2, 1])
 with col2:
-    if st.button("📊 Go to Portfolio Overview Dashboard", type="primary", use_container_width=True):
+    if st.button("📊 Go to Portfolio Overview Dashboard", type="primary", width='stretch'):
         st.switch_page("pages/1_Overview.py")
 st.markdown('</div>', unsafe_allow_html=True)
 

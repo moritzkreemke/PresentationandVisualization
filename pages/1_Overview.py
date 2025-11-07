@@ -157,7 +157,7 @@ def render_q2_q3_seasonal_and_trend(filtered_data: pd.DataFrame, year_range: tup
             )
         )
 
-        st.plotly_chart(fig_season, use_container_width=True)
+        st.plotly_chart(fig_season, width='stretch')
 
         if len(monthly_counts) > 0:
             top = monthly_counts.sort_values('count', ascending=False).iloc[0]
@@ -207,7 +207,7 @@ def render_q2_q3_seasonal_and_trend(filtered_data: pd.DataFrame, year_range: tup
                 hovermode='x unified',
                 height=400
             )
-            st.plotly_chart(fig_trend, use_container_width=True)
+            st.plotly_chart(fig_trend, width='stretch')
 
             if len(yearly_trends) > 1:
                 freq_change = ((yearly_trends['event_count'].iloc[-1] - yearly_trends['event_count'].iloc[0]) / (
@@ -273,7 +273,7 @@ def render_q4_peril_analyses(filtered_data: pd.DataFrame, premium_by_peril: pd.D
             fig_peril.add_annotation(x=0.05, y=0.15, text="✓ Nuisance", showarrow=False,
                                      bgcolor="rgba(200, 255, 200, 0.3)", font=dict(size=10))
             fig_peril.update_layout(height=450, showlegend=True)
-            st.plotly_chart(fig_peril, use_container_width=True)
+            st.plotly_chart(fig_peril, width='stretch')
             st.caption("💡 **Bubble size** represents Annual Premium collected by EuroShield")
         else:
             st.warning("No peril data available for the selected filters.")
@@ -337,7 +337,7 @@ def render_q4_peril_analyses(filtered_data: pd.DataFrame, premium_by_peril: pd.D
                 yaxis_title="Avg. Severity (1–10)",
                 hovermode="closest"
             )
-            st.plotly_chart(fig_peril, use_container_width=True)
+            st.plotly_chart(fig_peril, width='stretch')
             st.caption(
                 "💡 **Bubble size** represents Annual Premium collected by EuroShield | Animation shows yearly evolution")
         else:
@@ -390,7 +390,7 @@ def render_q5_growth_and_insights(filtered_data: pd.DataFrame, portfolio: pd.Dat
                 font=dict(size=12, color="darkgreen")
             )
             fig_growth.update_layout(height=450)
-            st.plotly_chart(fig_growth, use_container_width=True)
+            st.plotly_chart(fig_growth, width='stretch')
 
             safe_markets = growth_data[
                 (growth_data['total_events'] < mean_events) &
@@ -421,7 +421,7 @@ def render_q5_growth_and_insights(filtered_data: pd.DataFrame, portfolio: pd.Dat
                     'Total Deaths': 'Deaths',
                     'economic_impact_million_usd': 'Impact ($M)'
                 })
-                st.dataframe(deadliest, hide_index=True, use_container_width=True)
+                st.dataframe(deadliest, hide_index=True, width='stretch')
             else:
                 st.info("No data available")
         with col2:
@@ -434,7 +434,7 @@ def render_q5_growth_and_insights(filtered_data: pd.DataFrame, portfolio: pd.Dat
                     'economic_impact_million_usd': 'Impact ($M)',
                     'Total Affected': 'Affected'
                 })
-                st.dataframe(costliest, hide_index=True, use_container_width=True)
+                st.dataframe(costliest, hide_index=True, width='stretch')
             else:
                 st.info("No data available")
         with col3:
@@ -444,7 +444,7 @@ def render_q5_growth_and_insights(filtered_data: pd.DataFrame, portfolio: pd.Dat
                 event_dist.columns = ['Event Type', 'Count']
                 fig_pie = px.pie(event_dist, values='Count', names='Event Type', title='', hole=0.4)
                 fig_pie.update_layout(height=300, showlegend=True, margin=dict(t=0, b=0, l=0, r=0))
-                st.plotly_chart(fig_pie, use_container_width=True)
+                st.plotly_chart(fig_pie, width='stretch')
             else:
                 st.info("No data available")
 
@@ -479,7 +479,7 @@ def render_q5_growth_and_insights(filtered_data: pd.DataFrame, portfolio: pd.Dat
                 display_data['Affected'] = display_data['Affected'].fillna(0).astype(int)
             if 'Severity' in display_data.columns:
                 display_data = display_data.sort_values('Severity', ascending=False)
-            st.dataframe(display_data, hide_index=True, use_container_width=True, height=400)
+            st.dataframe(display_data, hide_index=True, width='stretch', height=400)
             csv = display_data.to_csv(index=False).encode('utf-8')
             st.download_button(
                 label="📥 Download Event Data as CSV",
@@ -525,7 +525,7 @@ def render_q5_growth_and_insights(filtered_data: pd.DataFrame, portfolio: pd.Dat
                         trendline="ols"
                     )
                     fig_corr1.update_layout(height=350)
-                    st.plotly_chart(fig_corr1, use_container_width=True)
+                    st.plotly_chart(fig_corr1, width='stretch')
             with col2:
                 if 'duration_days' in filtered_data.columns and len(filtered_data) > 5:
                     fig_corr2 = px.scatter(
@@ -538,7 +538,7 @@ def render_q5_growth_and_insights(filtered_data: pd.DataFrame, portfolio: pd.Dat
                         trendline="ols"
                     )
                     fig_corr2.update_layout(height=350)
-                    st.plotly_chart(fig_corr2, use_container_width=True)
+                    st.plotly_chart(fig_corr2, width='stretch')
 
         st.markdown("---")
         st.header("⚠️ Risk Alerts & Strategic Recommendations")
@@ -658,7 +658,7 @@ with col_f2:
     )
 
 with col_f3:
-    if st.button("🔄 Reset All", use_container_width=True):
+    if st.button("🔄 Reset All", width='stretch'):
         st.session_state.selected_country = "All Europe"
         st.session_state.selected_peril = "All Perils"
         st.session_state.selected_month = None

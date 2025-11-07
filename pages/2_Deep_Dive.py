@@ -20,7 +20,7 @@ def render_country_deep_dive(data: pd.DataFrame, portfolio: pd.DataFrame, premiu
     # Back button and title
     top_cols = st.columns([1, 8])
     with top_cols[0]:
-        if st.button("← Back", use_container_width=True):
+        if st.button("← Back", width='stretch'):
             st.session_state.selected_country = "All Europe"
             st.switch_page("pages/1_Overview.py")
     with top_cols[1]:
@@ -164,7 +164,7 @@ def render_country_deep_dive(data: pd.DataFrame, portfolio: pd.DataFrame, premiu
             hovermode='closest'
         )
 
-        st.plotly_chart(fig_align, use_container_width=True)
+        st.plotly_chart(fig_align, width='stretch')
 
         # Insights
         st.markdown("**Strategic Insights:**")
@@ -216,7 +216,7 @@ def render_country_deep_dive(data: pd.DataFrame, portfolio: pd.DataFrame, premiu
         margin=dict(l=0, r=0, t=20, b=0)
     )
 
-    st.plotly_chart(fig_heatmap, use_container_width=True)
+    st.plotly_chart(fig_heatmap, width='stretch')
 
     # Find peak risk months
     month_totals = df_country.groupby('month').size().sort_values(ascending=False)
@@ -245,7 +245,7 @@ def render_country_deep_dive(data: pd.DataFrame, portfolio: pd.DataFrame, premiu
             marker_colors=['#d62728', '#ff9896', '#ffbb78']
         )])
         fig_pie.update_layout(height=300, margin=dict(l=0, r=0, t=20, b=0))
-        st.plotly_chart(fig_pie, use_container_width=True)
+        st.plotly_chart(fig_pie, width='stretch')
 
         # Business interpretation
         total = total_deaths + total_injured + total_affected
@@ -270,7 +270,7 @@ def render_country_deep_dive(data: pd.DataFrame, portfolio: pd.DataFrame, premiu
             yaxis_title="",
             margin=dict(l=0, r=0, t=20, b=0)
         )
-        st.plotly_chart(fig_bar, use_container_width=True)
+        st.plotly_chart(fig_bar, width='stretch')
 
         # Business interpretation
         if len(damage_by_peril) > 0:
@@ -341,7 +341,7 @@ def render_country_deep_dive(data: pd.DataFrame, portfolio: pd.DataFrame, premiu
 
     st.dataframe(
         df_display,
-        use_container_width=True,
+        width='stretch',
         column_config={
             'Learn More': st.column_config.LinkColumn('Learn More', display_text='🔍 Google Search'),
             'Damage ($M)': st.column_config.NumberColumn(format='$%d'),
