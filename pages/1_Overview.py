@@ -136,7 +136,7 @@ def render_q2_q3_seasonal_and_trend(filtered_data: pd.DataFrame, year_range: tup
             color='event_type',
             markers=True,
             labels={'month': 'Month', 'count_smooth': 'Number of Events (Smoothed)', 'event_type': 'Event Type'},
-            title=f"Seasonal Patterns of Climate Events - {st.session_state.selected_country}",
+            title=f"Seasonal Patterns of Climate Events - All Europe",
             color_discrete_map={
                 'Flood': '#1f78b4',
                 'Heatwave': '#e31a1c',
@@ -200,7 +200,7 @@ def render_q2_q3_seasonal_and_trend(filtered_data: pd.DataFrame, year_range: tup
                 yaxis='y2'
             ))
             fig_trend.update_layout(
-                title=f'Climate Risk Trend - {st.session_state.selected_country} ({year_range[0]}-{year_range[1]})',
+                title=f'Climate Risk Trend - All Europe ({year_range[0]}-{year_range[1]})',
                 xaxis=dict(title='Year'),
                 yaxis=dict(title='Event Count', side='left'),
                 yaxis2=dict(title='Avg. Economic Impact ($M)', overlaying='y', side='right'),
@@ -484,7 +484,7 @@ def render_q5_growth_and_insights(filtered_data: pd.DataFrame, portfolio: pd.Dat
             st.download_button(
                 label="📥 Download Event Data as CSV",
                 data=csv,
-                file_name=f"euroshield_events_{st.session_state.selected_country}_{year_range[0]}_{year_range[1]}.csv",
+                file_name=f"euroshield_events_all_europe_{year_range[0]}_{year_range[1]}.csv",
                 mime="text/csv",
             )
         else:
@@ -573,17 +573,6 @@ def render_q5_growth_and_insights(filtered_data: pd.DataFrame, portfolio: pd.Dat
                 })
             growth_data = filtered_data.groupby('country').agg({'event_id': 'count', 'severity': 'mean'}).reset_index()
             growth_data = pd.merge(growth_data, portfolio, on='country', how='inner')
-            if st.session_state.selected_country != "All Europe":
-                country_data = growth_data[growth_data['country'] == st.session_state.selected_country]
-                if len(country_data) > 0:
-                    ms = country_data['market_share_percent'].iloc[0]
-                    sev = country_data['severity'].iloc[0]
-                    if ms < 5 and sev < 5:
-                        alerts.append({
-                            'type': '🎯 GROWTH OPPORTUNITY',
-                            'message': f"{st.session_state.selected_country} shows low risk (severity {sev:.1f}) with low market share ({ms:.1f}%)",
-                            'recommendation': 'Prioritize market expansion efforts in this region'
-                        })
             if alerts:
                 for alert in alerts:
                     if alert['type'].startswith('🔴'):
@@ -648,7 +637,7 @@ min_year = int(available_years[0]) if len(available_years) > 0 else 1950
 max_year = int(available_years[-1]) if len(available_years) > 0 else 2025
 
 # Top filter bar
-col_f1, col_f2, col_f3, col_f4 = st.columns([2, 2, 2, 1])
+col_f1, col_f2, col_f3 = st.columns([2, 2, 1])
 
 with col_f1:
     # Define covered and uncovered perils
@@ -662,23 +651,13 @@ with col_f1:
     )
 
 with col_f2:
-    european_countries = ["All Europe"] + sorted(portfolio['country'].tolist())
-    country_filter = st.selectbox(
-        "Country",
-        european_countries,
-        index=european_countries.index(
-            st.session_state.selected_country) if st.session_state.selected_country in european_countries else 0
-    )
-    st.session_state.selected_country = country_filter
-
-with col_f3:
     year_range = st.select_slider(
         "Year Range",
         options=list(range(min_year, max_year + 1)),
         value=(min_year, max_year)
     )
 
-with col_f4:
+with col_f3:
     if st.button("🔄 Reset All", use_container_width=True):
         st.session_state.selected_country = "All Europe"
         st.session_state.selected_peril = "All Perils"
@@ -687,8 +666,6 @@ with col_f4:
 
 # Breadcrumb trail
 breadcrumbs = []
-if st.session_state.selected_country != "All Europe":
-    breadcrumbs.append(st.session_state.selected_country)
 if st.session_state.selected_peril != "All Perils":
     breadcrumbs.append(st.session_state.selected_peril)
 if st.session_state.selected_month:
@@ -697,22 +674,11 @@ if st.session_state.selected_month:
 if breadcrumbs:
     st.info(f"**Active Filters:** {' > '.join(breadcrumbs)}")
 
-# Deep Dive navigation
-if st.session_state.selected_country != "All Europe":
-    nav_cols = st.columns([2, 1, 2, 2, 2])
-    with nav_cols[1]:
-        if st.button("➡️ Country Deep Dive", use_container_width=True):
-            st.switch_page("pages/2_Deep_Dive.py")
-
 # Apply filters to data
 filtered_data = merged_data.copy()
 
 # Filter by year range
 filtered_data = filtered_data[(filtered_data['year'] >= year_range[0]) & (filtered_data['year'] <= year_range[1])]
-
-# Filter by country
-if st.session_state.selected_country != "All Europe":
-    filtered_data = filtered_data[filtered_data['country'] == st.session_state.selected_country]
 
 # Filter by peril coverage
 if peril_coverage == "Covered Perils":
@@ -735,20 +701,11 @@ total_impact = filtered_data['economic_impact_million_usd'].sum()
 total_deaths = filtered_data['Total Deaths'].sum()
 total_affected = filtered_data['Total Affected'].sum()
 
-if st.session_state.selected_country != "All Europe":
-    country_portfolio = portfolio[portfolio['country'] == st.session_state.selected_country]
-    if not country_portfolio.empty:
-        total_policies = country_portfolio['policy_count'].iloc[0]
-        total_tiv = country_portfolio['total_insured_value_eur_billion'].iloc[0]
-        annual_premium = country_portfolio['annual_premium_eur_million'].iloc[0]
-        market_share = country_portfolio['market_share_percent'].iloc[0]
-    else:
-        total_policies = total_tiv = annual_premium = market_share = 0
-else:
-    total_policies = portfolio['policy_count'].sum()
-    total_tiv = portfolio['total_insured_value_eur_billion'].sum()
-    annual_premium = portfolio['annual_premium_eur_million'].sum()
-    market_share = portfolio['market_share_percent'].mean()
+# Always show All Europe portfolio stats
+total_policies = portfolio['policy_count'].sum()
+total_tiv = portfolio['total_insured_value_eur_billion'].sum()
+annual_premium = portfolio['annual_premium_eur_million'].sum()
+market_share = portfolio['market_share_percent'].mean()
 
 # Display KPIs
 st.markdown("---")
@@ -868,7 +825,7 @@ with st.sidebar:
 
     # Display current filter summary
     st.subheader("📌 Current Selection")
-    st.write(f"**Country**: {st.session_state.selected_country}")
+    st.write(f"**Region**: All Europe")
     st.write(f"**Peril Coverage**: {peril_coverage}")
     st.write(f"**Year Range**: {year_range[0]} - {year_range[1]}")
     st.write(f"**Events Shown**: {len(filtered_data):,}")

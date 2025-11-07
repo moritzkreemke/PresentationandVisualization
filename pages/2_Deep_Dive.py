@@ -21,6 +21,7 @@ def render_country_deep_dive(data: pd.DataFrame, portfolio: pd.DataFrame, select
     with top_cols[0]:
         if st.button("← Back to Overview", use_container_width=True):
             st.session_state.deep_dive_peril = 'All Perils'
+            st.session_state.selected_country = "All Europe"
             st.switch_page("pages/1_Overview.py")
     with top_cols[1]:
         st.markdown(f"### Deep Dive: {selected_country}")
