@@ -81,7 +81,7 @@ with col1:
     """, unsafe_allow_html=True)
 
 with col2:
-    st.markdown("""
+    st.html("""
     <div class="info-section">
         <div class="info-title">🏥🏠 Lines of Business</div>
         <div class="info-content">
@@ -102,7 +102,7 @@ with col2:
             </ul>
         </div>
     </div>
-    """, unsafe_allow_html=True)
+    """)
 
 st.markdown("---")
 
