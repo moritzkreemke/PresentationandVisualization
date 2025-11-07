@@ -43,7 +43,7 @@ if 'selected_month' not in st.session_state:
     st.session_state.selected_month = None
 
 # Header
-st.markdown('<div class="main-header">🏠 CIAOO EUROSHIELD CLIMATE RISK DASHBOARD</div>', unsafe_allow_html=True)
+st.markdown('<div class="main-header">🏠EUROSHIELD CLIMATE RISK DASHBOARD</div>', unsafe_allow_html=True)
 st.markdown(
     f'<div class="sub-header">Last Updated: {datetime.now().strftime("%B %Y")} | Data Source: EM-DAT International Disaster Database</div>',
     unsafe_allow_html=True)

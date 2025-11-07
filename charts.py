@@ -228,21 +228,40 @@ def render_q2_q3_seasonal_and_trend(filtered_data: pd.DataFrame, year_range: tup
 def render_q4_peril_analyses(filtered_data: pd.DataFrame, premium_by_peril: pd.DataFrame):
     col1, col2 = st.columns(2)
     with col1:
-        st.subheader("Q4: Which Perils Are 'Chronic Headaches' vs. 'Sleeping Giants'?")
+        st.subheader("Q4: Disaster Risk Profile: Frequency vs. Impact")
+
+        # --- Prepare data ---
         peril_data = filtered_data.groupby('event_type').agg({
             'severity': 'mean',
             'event_id': 'count'
         }).reset_index()
+
         years_in_data = filtered_data['year'].nunique()
         if years_in_data > 0:
             peril_data['average_annual_frequency'] = peril_data['event_id'] / years_in_data
         else:
             peril_data['average_annual_frequency'] = 0
+
         peril_analysis = pd.merge(peril_data, premium_by_peril, on='event_type', how='left')
         peril_analysis['annual_premium_eur_million'] = peril_analysis['annual_premium_eur_million'].fillna(0)
+        custom_color_map = {
+            "Drought": "#1B9E77",
+            "Earthquake": "#D95F02",
+            "Epidemic": "#7570B3",
+            "Flood": "#E7298A",
+            "Glacial Lake Outburst Flood": "#66A61E",
+            "Heatwave": "#E6AB02",
+            "Hurricane": "#A6761D",
+            "Landslide": "#556B2F",
+            "Volcanic": "#F781BF",
+            "Wildfire": "#FF4500"
+        }
+
+        # --- Plot if data exists ---
         if len(peril_analysis) > 0:
             mean_frequency = peril_analysis['average_annual_frequency'].mean()
             mean_severity = peril_analysis['severity'].mean()
+
             fig_peril = px.scatter(
                 peril_analysis,
                 x='average_annual_frequency',
@@ -250,6 +269,7 @@ def render_q4_peril_analyses(filtered_data: pd.DataFrame, premium_by_peril: pd.D
                 size='annual_premium_eur_million',
                 color='event_type',
                 hover_name='event_type',
+                color_discrete_map=custom_color_map,
                 hover_data={
                     'average_annual_frequency': ':.1f',
                     'severity': ':.1f',
@@ -258,87 +278,55 @@ def render_q4_peril_analyses(filtered_data: pd.DataFrame, premium_by_peril: pd.D
                 title='Risk Matrix: Frequency vs. Severity',
                 labels={
                     'average_annual_frequency': 'Avg. Annual Frequency (events/year)',
-                    'severity': 'Avg. Severity (1-10)'
+                    'severity': 'Avg. Severity'
                 }
             )
-            fig_peril.add_hline(y=mean_severity, line_dash="dash", line_color="gray", opacity=0.5)
-            fig_peril.add_vline(x=mean_frequency, line_dash="dash", line_color="gray", opacity=0.5)
-            fig_peril.add_annotation(x=0.05, y=0.9, text="⚠️ Sleeping Giants", showarrow=False,
-                                     bgcolor="rgba(255, 200, 200, 0.3)", font=dict(size=10))
-            fig_peril.add_annotation(x=4.5, y=0.9, text="🔴 DANGER ZONE", showarrow=False,
-                                     bgcolor="rgba(255, 100, 100, 0.3)", font=dict(size=10, color="darkred"))
-            fig_peril.add_annotation(x=4.5, y=0.15, text="⚡ Chronic Headaches", showarrow=False,
-                                     bgcolor="rgba(255, 255, 150, 0.3)", font=dict(size=10))
-            fig_peril.add_annotation(x=0.05, y=0.15, text="✓ Nuisance", showarrow=False,
-                                     bgcolor="rgba(200, 255, 200, 0.3)", font=dict(size=10))
-            fig_peril.update_layout(height=450, showlegend=True)
-            st.plotly_chart(fig_peril, use_container_width=True)
-            st.caption("💡 **Bubble size** represents Annual Premium collected by EuroShield")
-        else:
-            st.warning("No peril data available for the selected filters.")
 
-    with col1:
-        st.subheader("Q42: Which Perils Are 'Chronic Headaches' vs. 'Sleeping Giants'?")
-        peril_data = filtered_data.groupby(['year', 'event_type']).agg({
-            'severity': 'mean',
-            'event_id': 'count'
-        }).reset_index()
-        years_in_data = filtered_data['year'].nunique()
-        if years_in_data > 0:
-            peril_data['average_annual_frequency'] = peril_data['event_id'] / years_in_data
-        else:
-            peril_data['average_annual_frequency'] = 0
-        peril_analysis = pd.merge(peril_data, premium_by_peril, on='event_type', how='left')
-        peril_analysis['annual_premium_eur_million'] = peril_analysis['annual_premium_eur_million'].fillna(0)
-        if len(peril_analysis) > 0:
-            mean_frequency = peril_analysis['average_annual_frequency'].mean()
-            mean_severity = peril_analysis['severity'].mean()
-            fig_peril = px.scatter(
-                peril_analysis,
-                x='average_annual_frequency',
-                y='severity',
-                animation_frame='year',
-                animation_group='event_type',
-                size='annual_premium_eur_million',
-                color='event_type',
-                hover_name='event_type',
-                hover_data={
-                    'average_annual_frequency': ':.2f',
-                    'severity': ':.2f',
-                    'annual_premium_eur_million': ':,.1f'
-                },
-                title="Evolution of Peril Risk Positioning (Frequency vs. Severity)"
-            )
-            fig_peril.update_yaxes(
-                tickvals=[0, 0.05, 0.10, 0.15, 0.20, 0.25],
-                ticktext=['0', '0.05', '0.10', '0.15', '0.20', '0.25'],
-                range=[0, 0.26],
-                title_text="Avg. Severity (1–10)"
-            )
+            # --- Reference lines & zone annotations ---
             fig_peril.add_hline(y=mean_severity, line_dash="dash", line_color="gray", opacity=0.5)
             fig_peril.add_vline(x=mean_frequency, line_dash="dash", line_color="gray", opacity=0.5)
-            fig_peril.add_annotation(x=mean_frequency * 0.3, y=mean_severity * 1.3,
-                                     text="⚠️ Sleeping Giants", showarrow=False,
-                                     bgcolor="rgba(255, 200, 200, 0.3)", font=dict(size=10))
-            fig_peril.add_annotation(x=mean_frequency * 1.7, y=mean_severity * 1.3,
-                                     text="🔴 DANGER ZONE", showarrow=False,
-                                     bgcolor="rgba(255, 100, 100, 0.3)", font=dict(size=10, color="darkred"))
-            fig_peril.add_annotation(x=mean_frequency * 1.7, y=mean_severity * 0.7,
-                                     text="⚡ Chronic Headaches", showarrow=False,
-                                     bgcolor="rgba(255, 255, 150, 0.3)", font=dict(size=10))
-            fig_peril.add_annotation(x=mean_frequency * 0.3, y=mean_severity * 0.7,
-                                     text="✓ Nuisance", showarrow=False,
-                                     bgcolor="rgba(200, 255, 200, 0.3)", font=dict(size=10))
-            fig_peril.update_layout(
-                height=500,
-                showlegend=True,
-                xaxis_title="Avg. Annual Frequency (events/year)",
-                yaxis_title="Avg. Severity (1–10)",
-                hovermode="closest"
-            )
+
+            # 1.Rare but Disastrous Events
+            fig_peril.add_annotation(x=0.05, y=0.9, text="⚠️ Rare but Disastrous Events", showarrow=False,
+                                     bgcolor="rgba(255, 200, 200, 0.3)",
+                                     font=dict(size=10, color="darkred"))
+
+            # 2. High Risk Zone
+            fig_peril.add_annotation(x=4.5, y=0.9, text="🔴 High Risk Zone", showarrow=False,
+                                     bgcolor="rgba(255, 100, 100, 0.3)",
+                                     font=dict(size=10, color="#8B0000"))
+
+            # 3. Frequent, Low-Impact Events
+            fig_peril.add_annotation(x=4.5, y=0.15, text="⚡ Frequent, Low-Impact Events", showarrow=False,
+                                     bgcolor="rgba(255, 255, 150, 0.3)",
+                                     font=dict(size=10, color="#A6A600"))
+
+            # 4.  Minor Issues
+            fig_peril.add_annotation(x=0.05, y=0.15, text="✅ Minor Issues", showarrow=False,
+                                     bgcolor="rgba(200, 255, 200, 0.3)",
+                                     font=dict(size=10, color="darkgreen"))
+
+            fig_peril.update_layout(height=450, showlegend=True)
+
+            # --- Display chart ---
             st.plotly_chart(fig_peril, use_container_width=True)
-            st.caption(
-                "💡 **Bubble size** represents Annual Premium collected by EuroShield | Animation shows yearly evolution")
+            #st.caption("💡 **Bubble size** represents Annual Premium collected by EuroShield.")
+
+            # --- Dynamic summary below chart ---
+            most_frequent = peril_analysis.loc[peril_analysis['average_annual_frequency'].idxmax(), 'event_type']
+            most_risky = peril_analysis.loc[peril_analysis['severity'].idxmax(), 'event_type']
+
+            st.info(
+                "This chart compares how often each disaster occurs (x-axis) and its average impact (y-axis).  \n"
+                "Bubble size reflects the insurance premium collected, showing financial exposure.  \n"
+                "Perils in the upper-right are both frequent and severe, representing the highest overall risk.  \n\n"
+                "---  \n"
+                "**Summary:**  \n"
+                f"- **Most frequent event:** {most_frequent}  \n"
+                f"- **Highest severity event:** {most_risky}"
+            )
+
+
         else:
             st.warning("No peril data available for the selected filters.")
 
