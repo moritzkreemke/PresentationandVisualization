@@ -1,12 +1,18 @@
+import folium
 import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 import pydeck as pdk
+from streamlit_folium import st_folium
+import importlib
+
+from streamlit_plotly_events import plotly_events
 
 
 def render_q1_map(filtered_data: pd.DataFrame, portfolio: pd.DataFrame, country_centroids: dict):
-    # Prepare data for the map
+    # --- Data preparation ---
     map_data = filtered_data.groupby('country').agg({
         'severity': 'mean',
         'event_id': 'count',
@@ -20,84 +26,94 @@ def render_q1_map(filtered_data: pd.DataFrame, portfolio: pd.DataFrame, country_
         'event_id': 'total_events'
     }, inplace=True)
 
-    # Merge with portfolio data
     map_data = pd.merge(map_data, portfolio, on='country', how='inner')
-
-    # Add coordinates
     map_data['lat'] = map_data['country'].map(lambda c: country_centroids.get(c, {}).get('lat'))
     map_data['lon'] = map_data['country'].map(lambda c: country_centroids.get(c, {}).get('lon'))
     map_data = map_data.dropna(subset=['lat', 'lon'])
 
     if len(map_data) > 0:
-        # Normalize bubble sizes based on Total Insured Value
-        size_scale = 50000
-        map_data['radius'] = (map_data['total_insured_value_eur_billion'] / map_data[
-            'total_insured_value_eur_billion'].max()) * size_scale + 10000
+        # Debug: Check severity values
+        st.write("**Debug - Severity Statistics:**")
+        st.write(
+            f"Min: {map_data['average_severity'].min():.2f}, Max: {map_data['average_severity'].max():.2f}, Mean: {map_data['average_severity'].mean():.2f}")
 
-        # Color by severity (green to red gradient)
+        # --- Folium Map Creation ---
+        m = folium.Map(location=[54, 10], zoom_start=4, tiles="cartodbpositron")
+
+        # 1. CORRECTED: Smaller bubble sizes in meters (20km to 150km)
+        min_radius_meters = 20000  # 20 km
+        max_radius_meters = 150000  # 150 km
+
+        max_tiv = map_data['total_insured_value_eur_billion'].max()
+        min_tiv = map_data['total_insured_value_eur_billion'].min()
+
+        if max_tiv == min_tiv:
+            map_data['radius_meters'] = (min_radius_meters + max_radius_meters) / 2
+        else:
+            map_data['radius_meters'] = map_data['total_insured_value_eur_billion'].apply(
+                lambda tiv: min_radius_meters + ((tiv - min_tiv) / (max_tiv - min_tiv)) * (
+                            max_radius_meters - min_radius_meters)
+            )
+
+        # 2. Normalize color by severity
         sev = map_data['average_severity']
-        sev_norm = (sev - sev.min()) / (sev.max() - sev.min() + 1e-9)
-        map_data['r'] = (sev_norm * 255).astype(int)
-        map_data['g'] = (255 - (sev_norm * 255)).astype(int)
-        map_data['b'] = 80
+        sev_min = sev.min()
+        sev_max = sev.max()
 
-        # Create PyDeck layer
-        layer = pdk.Layer(
-            'ScatterplotLayer',
-            data=map_data,
-            get_position='[lon, lat]',
-            get_radius='radius',
-            get_fill_color='[r, g, b, 180]',
-            pickable=True,
-            auto_highlight=True
-        )
+        # Handle case where all severities are the same
+        if sev_max == sev_min:
+            map_data['color'] = '#FFA500'  # Orange for uniform severity
+        else:
+            sev_norm = (sev - sev_min) / (sev_max - sev_min)
+            map_data['r'] = (sev_norm * 255).astype(int)
+            map_data['g'] = (255 - (sev_norm * 255)).astype(int)
+            map_data['b'] = 80
+            map_data['color'] = map_data.apply(lambda row: f"#{row['r']:02x}{row['g']:02x}{row['b']:02x}", axis=1)
 
-        # View state centered on Europe
-        view_state = pdk.ViewState(
-            latitude=54.0,
-            longitude=10.0,
-            zoom=3.5,
-            pitch=0,
-            bearing=0
-        )
+        # 3. Add bubbles to the map
+        for idx, row in map_data.iterrows():
+            # CORRECTED: Complete tooltip HTML
+            tooltip_html = f"""
+            <div style="font-family: Arial, sans-serif; font-size: 12px; min-width: 250px;">
+                <b style="font-size: 14px;">{row['country']}</b><br/>
+                <hr style="margin: 5px 0; border: none; border-top: 1px solid #ccc;">
+                <b>Event Statistics:</b><br/>
+                Avg. Event Severity: <b>{row['average_severity']:.1f}/10</b><br/>
+                Total Events: <b>{int(row['total_events']):,}</b><br/>
+                Total Deaths: <b>{int(row['Total Deaths']):,}</b><br/>
+                People Affected: <b>{int(row['Total Affected']):,}</b><br/>
+                Economic Impact: <b>${row['economic_impact_million_usd']:,.0f}M</b><br/>
+                <br/>
+                <b>EuroShield Portfolio:</b><br/>
+                Policies: <b>{int(row['policy_count']):,}</b><br/>
+                Total Insured Value: <b>€{row['total_insured_value_eur_billion']:.1f}B</b><br/>
+                Annual Premium: <b>€{row['annual_premium_eur_million']:.1f}M</b><br/>
+                Market Share: <b>{row['market_share_percent']:.1f}%</b>
+            </div>
+            """
 
-        # Tooltip
-        tooltip = {
-            "html": """
-        <b>{country}</b><br/>
-        ─────────────────────────<br/>
-        Avg. Event Severity: {average_severity:.1f}/10<br/>
-        Total Events: {total_events}<br/>
-        Total Deaths: {Total Deaths:,.0f}<br/>
-        People Affected: {Total Affected:,.0f}<br/>
-        Economic Impact: ${economic_impact_million_usd:,.0f}M<br/>
-        <br/>
-        <b>EuroShield Portfolio:</b><br/>
-        Policies: {policy_count:,}<br/>
-        Total Insured Value: €{total_insured_value_eur_billion:.1f}B<br/>
-        Annual Premium: €{annual_premium_eur_million:.1f}M<br/>
-        Market Share: {market_share_percent:.1f}%
-        """,
-            "style": {
-                "backgroundColor": "#1f4788",
-                "color": "white",
-                "fontSize": "12px",
-                "padding": "10px"
-            }
-        }
+            folium.Circle(
+                location=[row['lat'], row['lon']],
+                radius=row['radius_meters'],
+                color=row['color'],
+                fill=True,
+                fill_color=row['color'],
+                fill_opacity=0.6,
+                weight=2,  # Border thickness
+                popup=row['country'],
+                tooltip=tooltip_html
+            ).add_to(m)
 
-        # Display map
-        st.pydeck_chart(pdk.Deck(
-            layers=[layer],
-            initial_view_state=view_state,
-            tooltip=tooltip,
-            map_style='light'
-        ), use_container_width=True)
+        map_output = st_folium(m, width='100%', height=500)
 
         st.caption(
             "💡 **Bubble size** represents Total Insured Value | **Color intensity** represents Average Event Severity (green=low, red=high)")
+
+        return map_output
+
     else:
         st.warning("No data available for the selected filters.")
+        return None
 
 
 def render_q2_q3_seasonal_and_trend(filtered_data: pd.DataFrame, year_range: tuple):
@@ -208,7 +224,7 @@ def render_q2_q3_seasonal_and_trend(filtered_data: pd.DataFrame, year_range: tup
                 hovermode='x unified',
                 height=400
             )
-            st.plotly_chart(fig_trend, use_container_width=True)
+            st.plotly_chart(fig_trend, width='stretch')
 
             if len(yearly_trends) > 1:
                 freq_change = ((yearly_trends['event_count'].iloc[-1] - yearly_trends['event_count'].iloc[0]) / (
@@ -272,7 +288,7 @@ def render_q4_peril_analyses(filtered_data: pd.DataFrame, premium_by_peril: pd.D
             fig_peril.add_annotation(x=0.05, y=0.15, text="✓ Nuisance", showarrow=False,
                                      bgcolor="rgba(200, 255, 200, 0.3)", font=dict(size=10))
             fig_peril.update_layout(height=450, showlegend=True)
-            st.plotly_chart(fig_peril, use_container_width=True)
+            st.plotly_chart(fig_peril, width='stretch')
             st.caption("💡 **Bubble size** represents Annual Premium collected by EuroShield")
         else:
             st.warning("No peril data available for the selected filters.")
@@ -336,7 +352,7 @@ def render_q4_peril_analyses(filtered_data: pd.DataFrame, premium_by_peril: pd.D
                 yaxis_title="Avg. Severity (1–10)",
                 hovermode="closest"
             )
-            st.plotly_chart(fig_peril, use_container_width=True)
+            st.plotly_chart(fig_peril, width='stretch')
             st.caption(
                 "💡 **Bubble size** represents Annual Premium collected by EuroShield | Animation shows yearly evolution")
         else:
@@ -388,7 +404,7 @@ def render_q5_growth_and_insights(filtered_data: pd.DataFrame, portfolio: pd.Dat
                 font=dict(size=12, color="darkgreen")
             )
             fig_growth.update_layout(height=450)
-            st.plotly_chart(fig_growth, use_container_width=True)
+            st.plotly_chart(fig_growth, width='stretch')
 
             safe_markets = growth_data[
                 (growth_data['total_events'] < mean_events) &
@@ -418,7 +434,7 @@ def render_q5_growth_and_insights(filtered_data: pd.DataFrame, portfolio: pd.Dat
                     'Total Deaths': 'Deaths',
                     'economic_impact_million_usd': 'Impact ($M)'
                 })
-                st.dataframe(deadliest, hide_index=True, use_container_width=True)
+                st.dataframe(deadliest, hide_index=True, width='stretch')
             else:
                 st.info("No data available")
         with col2:
@@ -431,7 +447,7 @@ def render_q5_growth_and_insights(filtered_data: pd.DataFrame, portfolio: pd.Dat
                     'economic_impact_million_usd': 'Impact ($M)',
                     'Total Affected': 'Affected'
                 })
-                st.dataframe(costliest, hide_index=True, use_container_width=True)
+                st.dataframe(costliest, hide_index=True, width='stretch')
             else:
                 st.info("No data available")
         with col3:
@@ -441,7 +457,7 @@ def render_q5_growth_and_insights(filtered_data: pd.DataFrame, portfolio: pd.Dat
                 event_dist.columns = ['Event Type', 'Count']
                 fig_pie = px.pie(event_dist, values='Count', names='Event Type', title='', hole=0.4)
                 fig_pie.update_layout(height=300, showlegend=True, margin=dict(t=0, b=0, l=0, r=0))
-                st.plotly_chart(fig_pie, use_container_width=True)
+                st.plotly_chart(fig_pie, width='stretch')
             else:
                 st.info("No data available")
 
@@ -476,7 +492,7 @@ def render_q5_growth_and_insights(filtered_data: pd.DataFrame, portfolio: pd.Dat
                 display_data['Affected'] = display_data['Affected'].fillna(0).astype(int)
             if 'Severity' in display_data.columns:
                 display_data = display_data.sort_values('Severity', ascending=False)
-            st.dataframe(display_data, hide_index=True, use_container_width=True, height=400)
+            st.dataframe(display_data, hide_index=True, width='stretch', height=400)
             csv = display_data.to_csv(index=False).encode('utf-8')
             st.download_button(
                 label="📥 Download Event Data as CSV",
@@ -521,7 +537,7 @@ def render_q5_growth_and_insights(filtered_data: pd.DataFrame, portfolio: pd.Dat
                         trendline="ols"
                     )
                     fig_corr1.update_layout(height=350)
-                    st.plotly_chart(fig_corr1, use_container_width=True)
+                    st.plotly_chart(fig_corr1, width='stretch')
             with col2:
                 if 'duration_days' in filtered_data.columns and len(filtered_data) > 5:
                     fig_corr2 = px.scatter(
@@ -534,7 +550,7 @@ def render_q5_growth_and_insights(filtered_data: pd.DataFrame, portfolio: pd.Dat
                         trendline="ols"
                     )
                     fig_corr2.update_layout(height=350)
-                    st.plotly_chart(fig_corr2, use_container_width=True)
+                    st.plotly_chart(fig_corr2, width='stretch')
 
         st.markdown("---")
         st.header("⚠️ Risk Alerts & Strategic Recommendations")
@@ -591,3 +607,191 @@ def render_q5_growth_and_insights(filtered_data: pd.DataFrame, portfolio: pd.Dat
                         st.success(f"**{alert['type']}**: {alert['message']}\n\n➡️ *{alert['recommendation']}*")
             else:
                 st.info("✅ No critical alerts at this time. Continue monitoring risk indicators.")
+
+
+
+def render_country_deep_dive(data: pd.DataFrame, portfolio: pd.DataFrame, selected_country: str):
+    st.markdown("---")
+    # Back button and title
+    top_cols = st.columns([1, 6, 3])
+    with top_cols[0]:
+        if st.button("← Back to Overview", width='stretch'):
+            st.session_state.mode = 'overview'
+            st.session_state.deep_dive_peril = 'All Perils'
+            st.rerun()
+    with top_cols[1]:
+        st.markdown(f"### Deep Dive: {selected_country}")
+    with top_cols[2]:
+        # Breadcrumb
+        peril_bc = st.session_state.get('deep_dive_peril', 'All Perils')
+        trail = f"{selected_country}" + (f" > {peril_bc}" if peril_bc and peril_bc != 'All Perils' else "")
+        st.caption(trail)
+
+    # Filter data for selected country and years 2020-2025
+    df_all = data[(data['country'] == selected_country) & (data['year'] >= 2020) & (data['year'] <= 2025)].copy()
+
+    # Apply peril filter if set
+    peril_filter = st.session_state.get('deep_dive_peril', 'All Perils')
+    df = df_all.copy()
+    if peril_filter and peril_filter != 'All Perils':
+        df = df[df['event_type'] == peril_filter]
+
+    # Fetch market share
+    mkt = portfolio[portfolio['country'] == selected_country]
+    market_share = mkt['market_share_percent'].iloc[0] if not mkt.empty else 0.0
+
+    # KPI calculations
+    total_events = int(len(df_all))
+    total_impact = float(df_all['economic_impact_million_usd'].sum()) if len(df_all) else 0.0
+    est_insured_loss = total_impact * (market_share / 100.0)
+    if len(df_all) and 'event_type' in df_all.columns:
+        sev_means = df_all.groupby('event_type')['severity'].mean()
+        most_severe_peril = sev_means.idxmax() if not sev_means.empty else '—'
+    else:
+        most_severe_peril = '—'
+
+    # Display KPI cards
+    k1, k2, k3, k4 = st.columns(4)
+    with k1:
+        st.metric("Total Events (2020–2025)", f"{total_events:,}")
+    with k2:
+        st.metric("Total Economic Impact", f"${total_impact:,.0f}M")
+    with k3:
+        st.metric("Est. EuroShield Insured Loss", f"${est_insured_loss:,.0f}M")
+    with k4:
+        st.metric("Most Severe Peril", most_severe_peril)
+
+    st.markdown("---")
+
+    # Component 2: Peril Impact Breakdown (Treemap)
+    st.subheader("Peril Impact Breakdown")
+    df_peril = df_all.copy()
+    if len(df_peril) > 0:
+        peril_group = df_peril.groupby('event_type').agg(
+            total_impact=('economic_impact_million_usd', 'sum'),
+            avg_severity=('severity', 'mean')
+        ).reset_index()
+        if len(peril_group) == 0:
+            st.info("No peril breakdown available.")
+        else:
+            fig_tree = px.treemap(
+                peril_group,
+                path=['event_type'],
+                values='total_impact',
+                color='avg_severity',
+                color_continuous_scale=["#fff7bc", "#fee391", "#fec44f", "#fe9929", "#d95f0e", "#993404"],
+                hover_data={'total_impact': ':.1f', 'avg_severity': ':.1f'},
+                title=''
+            )
+            fig_tree.update_layout(margin=dict(t=0, l=0, r=0, b=0), height=360, coloraxis_colorbar=dict(title="Avg Severity"))
+            clicked = None
+            used_click_capture = False
+            if plotly_events is not None:
+                used_click_capture = True
+                sel = plotly_events(fig_tree, click_event=True, hover_event=False, select_event=False, override_width="100%", override_height=380)
+                if sel:
+                    clicked = sel[0].get('label')
+            else:
+                st.plotly_chart(fig_tree, width='stretch')
+            c1, c2, c3 = st.columns([2,2,6])
+            with c1:
+                if st.button("Show All Perils"):
+                    st.session_state.deep_dive_peril = 'All Perils'
+                    st.rerun()
+            with c2:
+                if not used_click_capture:
+                    options = ['All Perils'] + sorted(peril_group['event_type'].unique().tolist())
+                    chosen = st.selectbox("Filter by peril", options, index=options.index(peril_filter) if peril_filter in options else 0)
+                    if chosen != peril_filter:
+                        st.session_state.deep_dive_peril = chosen
+                        st.rerun()
+            if clicked:
+                st.session_state.deep_dive_peril = clicked
+                st.rerun()
+    else:
+        st.info("No events found for the selected period.")
+
+    st.markdown("---")
+
+    # Component 3: Damage Profile Over Time (Stacked Bars + Line)
+    st.subheader("Damage Profile Over Time")
+    df_time = df_all.copy()
+    if peril_filter and peril_filter != 'All Perils':
+        df_time = df_time[df_time['event_type'] == peril_filter]
+    if len(df_time) > 0:
+        yearly = df_time.groupby('year').agg(
+            deaths=('Total Deaths', 'sum'),
+            injured=('No. Injured', 'sum'),
+            econ=('economic_impact_million_usd', 'sum')
+        ).reset_index()
+        fig_combo = make_subplots(specs=[[{"secondary_y": True}]])
+        fig_combo.add_bar(x=yearly['year'], y=yearly['deaths'], name='Deaths', marker_color='#d62728')
+        fig_combo.add_bar(x=yearly['year'], y=yearly['injured'], name='Injuries', marker_color='#ff9896')
+        fig_combo.add_trace(
+            go.Scatter(
+                x=yearly['year'], y=yearly['econ'], mode='lines+markers', name='Economic Impact ($M)',
+                line=dict(color='#1f77b4', width=3)
+            ), secondary_y=True
+        )
+        fig_combo.update_layout(barmode='stack', height=420, legend=dict(orientation='h'))
+        fig_combo.update_xaxes(title_text="Year")
+        fig_combo.update_yaxes(title_text="Total Casualties", secondary_y=False)
+        fig_combo.update_yaxes(title_text="Economic Impact ($M)", secondary_y=True)
+        st.plotly_chart(fig_combo, width='stretch')
+    else:
+        st.info("No time-series data for this selection.")
+
+    st.markdown("---")
+
+    # Component 4: Response Time vs. Damage Analysis (Scatter)
+    st.subheader("Response Time vs. Damage Analysis")
+    df_scatter = df_all.copy()
+    if peril_filter and peril_filter != 'All Perils':
+        df_scatter = df_scatter[df_scatter['event_type'] == peril_filter]
+    if len(df_scatter) > 0 and 'response_time_hours' in df_scatter.columns and 'infrastructure_damage_score' in df_scatter.columns:
+        fig_sc = px.scatter(
+            df_scatter,
+            x='response_time_hours',
+            y='infrastructure_damage_score',
+            color='event_type',
+            hover_name='event_type',
+            hover_data={'response_time_hours': ':.0f', 'infrastructure_damage_score': ':.1f', 'event_type': False},
+            labels={'response_time_hours': 'Response Time (hours)', 'infrastructure_damage_score': 'Infrastructure Damage Score (0–10)'}
+        )
+        fig_sc.update_traces(marker=dict(size=9, opacity=0.8))
+        fig_sc.update_layout(height=400)
+        st.plotly_chart(fig_sc, width='stretch')
+        st.caption("Note: Response time approximated from event duration due to data limitations.")
+    else:
+        st.info("Response vs. damage data not available for this selection.")
+
+    st.markdown("---")
+
+    # Component 5: Catastrophic Events Table
+    st.subheader("Catastrophic Events")
+    df_tbl = df_all.copy()
+    if peril_filter and peril_filter != 'All Perils':
+        df_tbl = df_tbl[df_tbl['event_type'] == peril_filter]
+    if len(df_tbl) > 0:
+        df_tbl['Total Casualties'] = df_tbl['Total Deaths'].fillna(0) + df_tbl['No. Injured'].fillna(0)
+        df_tbl['Year'] = df_tbl['year'].astype(int)
+        df_tbl['Month'] = pd.to_datetime(df_tbl['date']).dt.month_name()
+        df_tbl['Economic Impact (€M)'] = df_tbl['economic_impact_million_usd']
+        def _mk_url(row):
+            q = f"{row['Year']}+{row['Month']}+{selected_country}+{row['event_type']}"
+            return f"https://www.google.com/search?q={q.replace(' ', '+')}"
+        df_tbl['Investigate'] = df_tbl.apply(_mk_url, axis=1)
+        show_cols = ['date', 'event_type', 'severity', 'Economic Impact (€M)', 'Total Casualties', 'Investigate']
+        rename = {'date': 'Date', 'event_type': 'Event Type', 'severity': 'Severity (1-10)'}
+        table = df_tbl[show_cols].rename(columns=rename).sort_values(by='Economic Impact (€M)', ascending=False)
+        st.dataframe(
+            table,
+            width='stretch',
+            hide_index=True,
+            column_config={
+                'Investigate': st.column_config.LinkColumn("Investigate", display_text="Search"),
+                'Economic Impact (€M)': st.column_config.NumberColumn(format="%.0f")
+            }
+        )
+    else:
+        st.info("No events to display for the selected filters.")

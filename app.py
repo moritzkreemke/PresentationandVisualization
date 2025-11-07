@@ -2,7 +2,7 @@ import streamlit as st
 from datetime import datetime
 
 from data_loader import load_data, country_centroids
-from charts import render_q1_map, render_q2_q3_seasonal_and_trend, render_q4_peril_analyses, render_q5_growth_and_insights
+from charts import render_q1_map, render_q2_q3_seasonal_and_trend, render_q4_peril_analyses, render_q5_growth_and_insights, render_country_deep_dive
 
 # Set page configuration
 st.set_page_config(layout="wide", page_title="EuroShield Climate Risk Dashboard")
@@ -41,6 +41,11 @@ if 'selected_peril' not in st.session_state:
     st.session_state.selected_peril = "All Perils"
 if 'selected_month' not in st.session_state:
     st.session_state.selected_month = None
+# Deep dive state
+if 'mode' not in st.session_state:
+    st.session_state.mode = 'overview'
+if 'deep_dive_peril' not in st.session_state:
+    st.session_state.deep_dive_peril = 'All Perils'
 
 # Header
 st.markdown('<div class="main-header">🏠 CIAOO EUROSHIELD CLIMATE RISK DASHBOARD</div>', unsafe_allow_html=True)
@@ -85,7 +90,7 @@ with col_f3:
     )
 
 with col_f4:
-    if st.button("🔄 Reset All", use_container_width=True):
+    if st.button("🔄 Reset All", width='stretch'):
         st.session_state.selected_country = "All Europe"
         st.session_state.selected_peril = "All Perils"
         st.session_state.selected_month = None
@@ -102,6 +107,19 @@ if st.session_state.selected_month:
 
 if breadcrumbs:
     st.info(f"**Active Filters:** {' > '.join(breadcrumbs)}")
+
+# Deep Dive navigation
+if st.session_state.selected_country != "All Europe":
+    nav_cols = st.columns([2, 1, 2, 2, 2])
+    with nav_cols[1]:
+        if st.button("➡️ Country Deep Dive", width='stretch'):
+            st.session_state.mode = 'deep_dive'
+            st.rerun()
+
+# Render Deep Dive mode
+if st.session_state.mode == 'deep_dive' and st.session_state.selected_country != "All Europe":
+    render_country_deep_dive(data, portfolio, st.session_state.selected_country)
+    st.stop()
 
 # Apply filters to data
 filtered_data = merged_data.copy()
@@ -177,7 +195,20 @@ st.markdown("---")
 # Q1: WHERE ARE OUR GREATEST FINANCIAL RISKS FROM CLIMATE EVENTS?
 # ============================================================================
 st.header("Q1: Where Are Our Greatest Financial Risks from Climate Events?")
-render_q1_map(filtered_data, portfolio, country_centroids)
+
+# Call the updated function and capture its output
+map_click_data = render_q1_map(filtered_data, portfolio, country_centroids)
+
+# Check if a bubble was clicked
+# The clicked country's name is in 'last_object_clicked_popup'
+if map_click_data and map_click_data.get("last_object_clicked_popup"):
+    clicked_country = map_click_data["last_object_clicked_popup"]
+
+    # Update session state only if a *new* country is clicked to avoid loops
+    if st.session_state.selected_country != clicked_country:
+        st.session_state.selected_country = clicked_country
+        st.session_state.mode = 'deep_dive'
+        st.rerun()  # Rerun the app to show the deep dive page
 
 st.markdown("---")
 

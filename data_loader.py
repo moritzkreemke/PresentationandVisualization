@@ -45,6 +45,17 @@ def load_data():
         ), errors='coerce') - data['date']
     ).dt.days
 
+    # Derived fields for deep dive analytics
+    # Total casualties as deaths + injured
+    data['total_casualties'] = data['Total Deaths'].fillna(0) + data['No. Injured'].fillna(0)
+
+    # Proxy for response time (in hours): using event duration when available
+    data['response_time_hours'] = (data['duration_days'].fillna(0) * 24).clip(lower=1)
+
+    # Infrastructure damage score (0–10) based on normalized adjusted total damage
+    max_adj_damage = data["Total Damage, Adjusted ('000 US$)"].max() if data["Total Damage, Adjusted ('000 US$)"].max() > 0 else 1
+    data['infrastructure_damage_score'] = (data["Total Damage, Adjusted ('000 US$)"].fillna(0) / max_adj_damage) * 10
+
     # Create severity score based on multiple factors (0-10 scale)
     # Normalize deaths, affected, and damage
     max_deaths = data['Total Deaths'].max() if data['Total Deaths'].max() > 0 else 1
