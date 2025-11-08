@@ -157,8 +157,7 @@ def render_q1_map(filtered_data: pd.DataFrame, portfolio: pd.DataFrame, country_
             """, unsafe_allow_html=True)
 
             st.markdown("---")  # Separator
-            st.caption(
-                )
+
 
     else:
         st.warning("No data available for the selected filters.")
