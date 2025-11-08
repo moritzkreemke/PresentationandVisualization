@@ -31,16 +31,18 @@ def render_q1_map(filtered_data: pd.DataFrame, portfolio: pd.DataFrame, country_
     if len(map_data) > 0:
         # Normalize bubble sizes based on Total Insured Value
         size_scale = 50000
+        min_radius = 10000
         map_data['radius'] = (map_data['total_insured_value_eur_billion'] / map_data[
             'total_insured_value_eur_billion'].max()) * size_scale + 10000
 
         # Color by severity (green to red gradient)
         sev = map_data['average_severity']
         sev_norm = (sev - sev.min()) / (sev.max() - sev.min() + 1e-9)
-        map_data['r'] = (sev_norm * 255).astype(int)
-        map_data['g'] = (255 - (sev_norm * 255)).astype(int)
-        map_data['b'] = 80
 
+        # Red gradient: low severity = light red, high severity = dark red
+        map_data['r'] = (255 - (sev_norm * 105)).astype(int).clip(0, 255)
+        map_data['g'] = (125 - (sev_norm * 125)).astype(int).clip(0, 255)
+        map_data['b'] = (125 - (sev_norm * 125)).astype(int).clip(0, 255)
         # Create PyDeck layer
         layer = pdk.Layer(
             'ScatterplotLayer',
@@ -86,16 +88,78 @@ def render_q1_map(filtered_data: pd.DataFrame, portfolio: pd.DataFrame, country_
             }
         }
 
-        # Display map
-        st.pydeck_chart(pdk.Deck(
-            layers=[layer],
-            initial_view_state=view_state,
-            tooltip=tooltip,
-            map_style='light'
-        ), use_container_width=True)
+        # Use columns for layout: map on one side, legends on the other
+        col1, col2 = st.columns([3, 1])  # Map takes 3 parts, legend takes 1 part
 
-        st.caption(
-            "💡 **Bubble size** represents Total Insured Value | **Color intensity** represents Average Event Severity (green=low, red=high)")
+        with col1:
+            st.pydeck_chart(pdk.Deck(
+                layers=[layer],
+                initial_view_state=view_state,
+                tooltip=tooltip,
+                map_style='light'  # or 'carto-dark' for a dark map
+            ), use_container_width=True)
+
+        with col2:
+            # --- Legend for BUBBLE SIZE Total Insured Value ---
+            st.markdown("**Bubble size** : Total Insured Value")
+
+            # Display some example sizes
+            max_val = map_data['total_insured_value_eur_billion'].max()
+            min_val = map_data['total_insured_value_eur_billion'].min()
+
+            # We want representative values, not necessarily min/max if they are outliers
+            # Let's pick 3 representative values for the legend
+            legend_values = [
+                max_val,
+                max_val / 2,  # Mid-point for example
+                min_val if min_val > 0 else 0.1  # Ensure min is not zero for display
+            ]
+
+            # Sort in descending order for better display
+            legend_values.sort(reverse=True)
+
+            for val in legend_values:
+                # Calculate radius for this specific value
+                display_radius = (val / max_val) * size_scale + min_radius
+                # Scale for display in Streamlit (e.g., divide by a factor for smaller SVG)
+                display_size_svg = max(5, int(display_radius / 3000))  # Adjust divisor to fit your UI
+
+                # Using HTML/SVG for a simple circle
+                st.markdown(f"""
+                        <div style="display: flex; align-items: center; margin-bottom: 5px;">
+                            <svg height="{display_size_svg}" width="{display_size_svg}">
+                                <circle cx="{display_size_svg / 2}" cy="{display_size_svg / 2}" r="{display_size_svg / 2}" fill="#808080" />
+                            </svg>
+                            <span style="margin-left: 10px;">€{val:.1f} Billions </span>
+                        </div>
+                        """, unsafe_allow_html=True)
+
+            st.markdown("---")  # Separator
+
+            # --- Legend for COLOR: Average Event Severity ---
+            st.markdown("**Color intensity** : Average Event Severity")
+
+            # Generate a simple gradient bar
+            st.markdown("""
+                    <div style="
+                background: linear-gradient(to right, 
+                    rgb(255, 125, 125),   /* Light Red - Low severity */
+                    rgb(150, 0, 0)        /* Dark Red - High severity */
+                );
+                height: 20px;
+                width: 100%;
+                border-radius: 5px;
+                margin-top: 5px;
+            "></div>
+            <div style="display: flex; justify-content: space-between; font-size: 12px; margin-top: 5px;">
+                <span>Low (1/10)</span>
+                <span>High (10/10)</span>
+            </div>
+            """, unsafe_allow_html=True)
+
+            st.markdown("---")  # Separator
+            st.caption(
+                )
     else:
         st.warning("No data available for the selected filters.")
 
@@ -348,9 +412,8 @@ def render_q5_growth_and_insights(filtered_data: pd.DataFrame, portfolio: pd.Dat
                 growth_data,
                 x='total_events',
                 y='severity',
-                size='total_insured_value_eur_billion',
                 color='market_share_percent',
-                color_continuous_scale='Blues_r',
+                color_continuous_scale='Blues',
                 hover_name='country',
                 hover_data={
                     'total_events': True,
@@ -366,11 +429,12 @@ def render_q5_growth_and_insights(filtered_data: pd.DataFrame, portfolio: pd.Dat
                     'market_share_percent': 'Market Share %'
                 }
             )
+            fig_growth.update_traces(marker=dict(size=20))
             fig_growth.add_hline(y=mean_severity_growth, line_dash="dash", line_color="gray", opacity=0.5)
             fig_growth.add_vline(x=mean_events, line_dash="dash", line_color="gray", opacity=0.5)
             fig_growth.add_annotation(
                 x=mean_events * 0.3, y=mean_severity_growth * 0.7,
-                text="🎯 Safe Harbor Markets",
+                text="Safe Harbor Markets",
                 showarrow=False,
                 bgcolor="rgba(150, 255, 150, 0.3)",
                 font=dict(size=12, color="darkgreen")
@@ -389,7 +453,6 @@ def render_q5_growth_and_insights(filtered_data: pd.DataFrame, portfolio: pd.Dat
                         Based on low risk + low market share, consider expansion in:
                         {chr(10).join([f"• **{row['country']}** ({row['market_share_percent']:.1f}% share, {int(row['total_events'])} events, severity {row['severity']:.1f})" for _, row in safe_markets.iterrows()])}
                         """)
-            st.caption("💡 **Darker blue** = Higher market share (established) | **Lighter blue** = Lower market share (opportunity)")
         else:
             st.warning("No growth opportunity data available for the selected filters.")
 
@@ -495,7 +558,7 @@ def render_q5_growth_and_insights(filtered_data: pd.DataFrame, portfolio: pd.Dat
             with col4:
                 st.metric("Events per Year", f"{len(filtered_data) / max(1, filtered_data['year'].nunique()):.1f}")
 
-            st.subheader("🔗 Risk Correlations")
+            st.subheader("Risk Correlations")
             col1, col2 = st.columns(2)
             with col1:
                 if len(filtered_data) > 5:
@@ -506,7 +569,6 @@ def render_q5_growth_and_insights(filtered_data: pd.DataFrame, portfolio: pd.Dat
                         color='event_type',
                         title='Severity vs. Economic Impact',
                         labels={'severity': 'Severity Score (1-10)', 'economic_impact_million_usd': 'Economic Impact ($M)'},
-                        trendline="ols"
                     )
                     fig_corr1.update_layout(height=350)
                     st.plotly_chart(fig_corr1, use_container_width=True)
@@ -519,7 +581,6 @@ def render_q5_growth_and_insights(filtered_data: pd.DataFrame, portfolio: pd.Dat
                         color='event_type',
                         title='Event Duration vs. People Affected',
                         labels={'duration_days': 'Duration (days)', 'Total Affected': 'People Affected'},
-                        trendline="ols"
                     )
                     fig_corr2.update_layout(height=350)
                     st.plotly_chart(fig_corr2, use_container_width=True)
