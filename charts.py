@@ -3,7 +3,18 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import pydeck as pdk
-
+custom_color_map = {
+            "Drought": "#1B9E77",
+            "Earthquake": "#D95F02",
+            "Epidemic": "#7570B3",
+            "Flood": "#E7298A",
+            "Glacial Lake Outburst Flood": "#66A61E",
+            "Heatwave": "#E6AB02",
+            "Hurricane": "#A6761D",
+            "Landslide": "#556B2F",
+            "Volcanic": "#F781BF",
+            "Wildfire": "#FF4500"
+        }
 
 def render_q1_map(filtered_data: pd.DataFrame, portfolio: pd.DataFrame, country_centroids: dict):
     # Prepare data for the map
@@ -288,21 +299,25 @@ def render_q4_peril_analyses(filtered_data: pd.DataFrame, premium_by_peril: pd.D
 
             # 1.Rare but Disastrous Events
             fig_peril.add_annotation(x=0.05, y=0.9, text="⚠️ Rare but Disastrous Events", showarrow=False,
+                                     xref="paper", yref="paper",
                                      bgcolor="rgba(255, 200, 200, 0.3)",
                                      font=dict(size=10, color="darkred"))
 
             # 2. High Risk Zone
-            fig_peril.add_annotation(x=4.5, y=0.9, text="🔴 High Risk Zone", showarrow=False,
+            fig_peril.add_annotation(x=0.85, y=0.9, text="🔴 High Risk Zone", showarrow=False,
+                                     xref="paper", yref="paper",
                                      bgcolor="rgba(255, 100, 100, 0.3)",
                                      font=dict(size=10, color="#8B0000"))
 
             # 3. Frequent, Low-Impact Events
-            fig_peril.add_annotation(x=4.5, y=0.15, text="⚡ Frequent, Low-Impact Events", showarrow=False,
+            fig_peril.add_annotation(x=0.85, y=0.15, text="⚡ Frequent, Low-Impact Events", showarrow=False,
+                                     xref="paper", yref="paper",
                                      bgcolor="rgba(255, 255, 150, 0.3)",
                                      font=dict(size=10, color="#A6A600"))
 
             # 4.  Minor Issues
             fig_peril.add_annotation(x=0.05, y=0.15, text="✅ Minor Issues", showarrow=False,
+                                     xref="paper", yref="paper",
                                      bgcolor="rgba(200, 255, 200, 0.3)",
                                      font=dict(size=10, color="darkgreen"))
 
@@ -401,25 +416,74 @@ def render_q5_growth_and_insights(filtered_data: pd.DataFrame, portfolio: pd.Dat
             if len(filtered_data) > 0:
                 deadliest = filtered_data.nlargest(5, 'Total Deaths')[
                     ['country', 'event_type', 'Start Year', 'Total Deaths', 'economic_impact_million_usd']]
+
                 deadliest = deadliest.rename(columns={
+                    'country': 'Country',
+                    'event_type': 'Event Type',
                     'Start Year': 'Year',
                     'Total Deaths': 'Deaths',
                     'economic_impact_million_usd': 'Impact ($M)'
                 })
-                st.dataframe(deadliest, hide_index=True, use_container_width=True)
+
+                # --- NEW: APPLY STYLING FOR IMPACT AND DEATHS ---
+
+                # 1. Apply currency formatting to Impact ($M)
+                # 2. Bold and highlight the Deaths column (using a dark red for urgency)
+
+                def style_dataframe(df):
+                    # Define formatting for currency and integer
+                    styled_df = df.style.format({
+                        'Impact ($M)': '${:,.0f}',  # Currency format with comma separator
+                        'Deaths': '{:,.0f}'  # Integer format with comma separator
+                    })
+
+                    # Highlight the Deadliest column (high contrast and urgency)
+                    styled_df = styled_df.set_properties(**{
+                        'font-weight': 'bold',
+                        'color': '#8B0000'  # Dark Red for high severity/deaths
+                    }, subset=['Deaths'])
+
+                    return styled_df
+
+                st.dataframe(style_dataframe(deadliest), hide_index=True, use_container_width=True)
+                # --- END OF STYLING ---
+
             else:
                 st.info("No data available")
+
         with col2:
             st.subheader("Most Costly Events")
             if len(filtered_data) > 0:
                 costliest = filtered_data.nlargest(5, 'economic_impact_million_usd')[
                     ['country', 'event_type', 'Start Year', 'economic_impact_million_usd', 'Total Affected']]
+
                 costliest = costliest.rename(columns={
+                    'country': 'Country',
+                    'event_type': 'Event Type',
                     'Start Year': 'Year',
                     'economic_impact_million_usd': 'Impact ($M)',
                     'Total Affected': 'Affected'
                 })
-                st.dataframe(costliest, hide_index=True, use_container_width=True)
+
+
+                def style_costliest_dataframe(df):
+
+                    styled_df = df.style.format({
+                        'Impact ($M)': '${:,.0f}',
+                        'Affected': '{:,.0f}'
+                    })
+
+
+                    styled_df = styled_df.set_properties(**{
+                        'font-weight': 'bold',
+                        'color': '#1F78B4'  # Dark Blue for financial/economic focus
+                    }, subset=['Impact ($M)'])
+
+                    return styled_df
+
+                st.dataframe(style_costliest_dataframe(costliest), hide_index=True, use_container_width=True)
+
+
             else:
                 st.info("No data available")
         with col3:
@@ -495,21 +559,50 @@ def render_q5_growth_and_insights(filtered_data: pd.DataFrame, portfolio: pd.Dat
             with col4:
                 st.metric("Events per Year", f"{len(filtered_data) / max(1, filtered_data['year'].nunique()):.1f}")
 
-            st.subheader("🔗 Risk Correlations")
+
+            mean_severity = filtered_data['severity'].mean()
+            mean_impact = filtered_data['economic_impact_million_usd'].mean()
+
+            st.subheader("🔗 Risk Correllations")
             col1, col2 = st.columns(2)
+
             with col1:
                 if len(filtered_data) > 5:
+                    mean_severity = filtered_data['severity'].mean()
+                    mean_impact = filtered_data['economic_impact_million_usd'].mean()
+
                     fig_corr1 = px.scatter(
                         filtered_data,
                         x='severity',
                         y='economic_impact_million_usd',
                         color='event_type',
+                        color_discrete_map=custom_color_map,
+                        size_max=10,
+                        opacity=0.7,  # <--- NUOVO: Opacità ridotta per densità
                         title='Severity vs. Economic Impact',
-                        labels={'severity': 'Severity Score (1-10)', 'economic_impact_million_usd': 'Economic Impact ($M)'},
-                        trendline="ols"
+                        labels={'severity': 'Severity Score (1-10)',
+                                'economic_impact_million_usd': 'Economic Impact ($M)'},
+                        trendline="ols",
+                        hover_data={
+                            'economic_impact_million_usd': '$,.0f'
+                        }
                     )
-                    fig_corr1.update_layout(height=350)
+
+
+                    fig_corr1.update_traces(marker=dict(line=dict(width=0.5, color='DarkSlateGray')))
+
+                    fig_corr1.add_hline(y=mean_impact, line_dash="dash", line_color="#E6AB02", opacity=0.7)
+                    fig_corr1.add_vline(x=mean_severity, line_dash="dash", line_color="#E6AB02", opacity=0.7)
+
+                    fig_corr1.update_yaxes(tickprefix="$", tickformat=".2s")
+                    fig_corr1.update_layout(
+                        height=380,
+                        showlegend=False,
+                        margin=dict(t=30, b=0, l=0, r=0)
+                    )
                     st.plotly_chart(fig_corr1, use_container_width=True)
+
+
             with col2:
                 if 'duration_days' in filtered_data.columns and len(filtered_data) > 5:
                     fig_corr2 = px.scatter(
@@ -517,12 +610,25 @@ def render_q5_growth_and_insights(filtered_data: pd.DataFrame, portfolio: pd.Dat
                         x='duration_days',
                         y='Total Affected',
                         color='event_type',
+                        color_discrete_map=custom_color_map,
+                        size_max=10,
+                        opacity=0.7,  # <--- NUOVO: Opacità ridotta
                         title='Event Duration vs. People Affected',
                         labels={'duration_days': 'Duration (days)', 'Total Affected': 'People Affected'},
-                        trendline="ols"
+                        trendline="ols",
+                        hover_data={
+                            'Total Affected': ',.0f'
+                        }
                     )
-                    fig_corr2.update_layout(height=350)
+
+
+                    fig_corr2.update_traces(marker=dict(line=dict(width=0.5, color='DarkSlateGray')))
+
+                    fig_corr2.update_layout(height=380, margin=dict(t=30, b=0, l=0, r=0))
                     st.plotly_chart(fig_corr2, use_container_width=True)
+                    st.info(
+                        "HI GUYS I tried to change these graphs but they still seem a little messy :(."
+                    )
 
         st.markdown("---")
         st.header("⚠️ Risk Alerts & Strategic Recommendations")
