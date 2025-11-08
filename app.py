@@ -2,13 +2,15 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-import altair as alt
-import pydeck as pdk
 from datetime import datetime
 import numpy as np
 
+# =================================================================
+# 1. GLOBAL CONFIGURATION AND ASSETS
+# =================================================================
+
 # Set page configuration
-st.set_page_config(layout="wide", page_title="EuroShield Climate Risk Dashboard")
+st.set_page_config(layout="wide", page_title="EuroShield Climate Risk Dashboard (COVID Period Analysis)")
 
 # Custom CSS for better styling
 st.markdown("""
@@ -30,98 +32,29 @@ st.markdown("""
         border-radius: 0.5rem;
         border-left: 4px solid #1f4788;
     }
+    /* Reduce padding around plots to save space */
+    div.stPlotlyChart {
+        padding: 0px;
+    }
     </style>
 """, unsafe_allow_html=True)
 
 
-# Load data
-@st.cache_data
-def load_data():
-    # Load the three CSV files
-    data = pd.read_csv("data.csv", encoding='utf-8')
-    portfolio = pd.read_csv("euroshield_portfolio_by_country.csv")
-    premium_by_peril = pd.read_csv("euroshield_premium_by_peril.csv")
+# --- CUSTOM COLOR MAP ---
+custom_color_map = {
+    "Drought": "#1B9E77",
+    "Earthquake": "#D95F02",
+    "Epidemic": "#7570B3",
+    "Flood": "#E7298A",
+    "Glacial Lake Outburst Flood": "#66A61E",
+    "Heatwave": "#E6AB02",
+    "Hurricane": "#A6761D",
+    "Landslide": "#556B2F",
+    "Volcanic": "#F781BF",
+    "Wildfire": "#FF4500"
+}
 
-    # Clean and prepare the main data
-    # Convert numeric columns
-    numeric_cols = ['Total Deaths', 'No. Injured', 'No. Affected', 'No. Homeless',
-                    'Total Affected', 'Total Damage (\'000 US$)', 'Total Damage, Adjusted (\'000 US$)',
-                    'Insured Damage (\'000 US$)', 'Insured Damage, Adjusted (\'000 US$)',
-                    'Start Year', 'Start Month', 'Start Day', 'End Year', 'End Month', 'End Day']
-
-    for col in numeric_cols:
-        if col in data.columns:
-            data[col] = pd.to_numeric(data[col], errors='coerce')
-
-    # Create a date column from Start Year, Month, Day
-    data['date'] = pd.to_datetime(
-        data[['Start Year', 'Start Month', 'Start Day']].rename(
-            columns={'Start Year': 'year', 'Start Month': 'month', 'Start Day': 'day'}
-        ),
-        errors='coerce'
-    )
-
-    # Extract month and year for analysis
-    data['month'] = data['Start Month']
-    data['year'] = data['Start Year']
-
-    # Calculate event duration in days
-    data['duration_days'] = (
-            pd.to_datetime(data[['End Year', 'End Month', 'End Day']].rename(
-                columns={'End Year': 'year', 'End Month': 'month', 'End Day': 'day'}
-            ), errors='coerce') - data['date']
-    ).dt.days
-
-    # Create severity score based on multiple factors (0-10 scale)
-    # Normalize deaths, affected, and damage
-    max_deaths = data['Total Deaths'].max() if data['Total Deaths'].max() > 0 else 1
-    max_affected = data['Total Affected'].max() if data['Total Affected'].max() > 0 else 1
-    max_damage = data['Total Damage, Adjusted (\'000 US$)'].max() if data[
-                                                                         'Total Damage, Adjusted (\'000 US$)'].max() > 0 else 1
-
-    data['severity'] = (
-            (data['Total Deaths'].fillna(0) / max_deaths * 3) +
-            (data['Total Affected'].fillna(0) / max_affected * 3) +
-            (data['Total Damage, Adjusted (\'000 US$)'].fillna(0) / max_damage * 4)
-    ).clip(0, 10)
-
-    # Map Disaster Type to simpler event types
-    disaster_type_mapping = {
-        'Flood': 'Flood',
-        'Storm': 'Hurricane',
-        'Extreme temperature': 'Heatwave',
-        'Wildfire': 'Wildfire',
-        'Drought': 'Drought',
-        'Earthquake': 'Earthquake',
-        'Mass movement (wet)': 'Landslide',
-        'Mass movement (dry)': 'Landslide',
-        'Volcanic activity': 'Volcanic',
-        'Landslide': 'Landslide'
-    }
-
-    data['event_type'] = data['Disaster Type'].map(disaster_type_mapping).fillna(data['Disaster Type'])
-
-    # Convert economic impact to millions (data is in thousands)
-    data['economic_impact_million_usd'] = data['Total Damage, Adjusted (\'000 US$)'].fillna(0) / 1000
-
-    # Create unique event ID
-    data['event_id'] = data.index
-
-    # Keep only European countries that are in the portfolio
-    data = data[data['Country'].isin(portfolio['country'])]
-
-    # Rename Country to country for consistency
-    data = data.rename(columns={'Country': 'country'})
-
-    # Merge data with portfolio data
-    merged_data = pd.merge(data, portfolio, on='country', how='inner')
-
-    return data, portfolio, premium_by_peril, merged_data
-
-
-data, portfolio, premium_by_peril, merged_data = load_data()
-
-# Country centroids (approximate) for European countries
+# Country centroids (approximate)
 country_centroids = {
     'Germany': {'lat': 51.1657, 'lon': 10.4515},
     'France': {'lat': 46.2276, 'lon': 2.2137},
@@ -145,6 +78,142 @@ country_centroids = {
     'Hungary': {'lat': 47.1625, 'lon': 19.5033},
 }
 
+# =================================================================
+# 2. DATA LOADING AND PREPARATION (FIXED)
+# =================================================================
+
+@st.cache_data
+def load_data():
+    # Load the three CSV files
+    data = pd.read_csv("data.csv", encoding='utf-8')
+    portfolio = pd.read_csv("euroshield_portfolio_by_country.csv")
+    premium_by_peril = pd.read_csv("euroshield_premium_by_peril.csv")
+
+    # Ensure these columns exist before operating on them
+    numeric_cols = ['Total Deaths', 'No. Injured', 'No. Affected', 'No. Homeless',
+                    'Total Affected', "Total Damage ('000 US$)", "Total Damage, Adjusted ('000 US$)",
+                    "Insured Damage ('000 US$)", "Insured Damage, Adjusted ('000 US$)",
+                    'Start Year', 'Start Month', 'Start Day', 'End Year', 'End Month', 'End Day']
+
+    for col in numeric_cols:
+        if col in data.columns:
+            # Convert to numeric, coercing errors to NaN
+            data[col] = pd.to_numeric(data[col], errors='coerce')
+
+            # Use Pandas Nullable Integer Type for temporal columns so they can contain NA
+            if 'Year' in col or 'Month' in col or 'Day' in col:
+                data[col] = data[col].astype(pd.Int64Dtype())
+
+    # Create an event id (safe unique id)
+    data['event_id'] = data.index
+
+    # --- SAFELY BUILD START DATE ---
+    if {'Start Year', 'Start Month', 'Start Day'}.issubset(data.columns):
+        # Fill missing parts with 1 as placeholder then convert to int for to_datetime assembly
+        start_parts = data[['Start Year', 'Start Month', 'Start Day']].fillna(1)
+        # after fillna, convert to plain int so pandas can assemble
+        try:
+            start_parts = start_parts.astype(int)
+        except Exception:
+            # fallback: convert each column individually
+            start_parts['Start Year'] = start_parts['Start Year'].astype(int)
+            start_parts['Start Month'] = start_parts['Start Month'].astype(int)
+            start_parts['Start Day'] = start_parts['Start Day'].astype(int)
+
+        start_parts = start_parts.rename(columns={'Start Year': 'year', 'Start Month': 'month', 'Start Day': 'day'})
+        data['date'] = pd.to_datetime(start_parts, errors='coerce')
+    else:
+        data['date'] = pd.NaT
+
+    # Extract month and year for analysis (keep same nullable type)
+    if 'Start Month' in data.columns:
+        data['month'] = data['Start Month']
+    else:
+        data['month'] = pd.Series([pd.NA] * len(data), dtype="Int64")
+
+    if 'Start Year' in data.columns:
+        data['year'] = data['Start Year']
+    else:
+        data['year'] = pd.Series([pd.NA] * len(data), dtype="Int64")
+
+    # --- SAFELY BUILD END DATE & DURATION ---
+    if {'End Year', 'End Month', 'End Day'}.issubset(data.columns):
+        end_parts = data[['End Year', 'End Month', 'End Day']].fillna(1)
+        try:
+            end_parts = end_parts.astype(int)
+        except Exception:
+            end_parts['End Year'] = end_parts['End Year'].astype(int)
+            end_parts['End Month'] = end_parts['End Month'].astype(int)
+            end_parts['End Day'] = end_parts['End Day'].astype(int)
+
+        end_parts = end_parts.rename(columns={'End Year': 'year', 'End Month': 'month', 'End Day': 'day'})
+        end_dt = pd.to_datetime(end_parts, errors='coerce')
+        data['duration_days'] = (end_dt - data['date']).dt.days
+    else:
+        data['duration_days'] = pd.NA
+
+    # Create severity score (0-10) with safe fallbacks
+    max_deaths = data['Total Deaths'].max() if ('Total Deaths' in data.columns and pd.notna(data['Total Deaths'].max())) else 1
+    max_affected = data['Total Affected'].max() if ('Total Affected' in data.columns and pd.notna(data['Total Affected'].max())) else 1
+    max_damage = data["Total Damage, Adjusted ('000 US$)"].max() if ("Total Damage, Adjusted ('000 US$)" in data.columns and pd.notna(data["Total Damage, Adjusted ('000 US$)"].max())) else 1
+
+    data['severity'] = (
+            (data['Total Deaths'].fillna(0) / max_deaths * 3) +
+            (data['Total Affected'].fillna(0) / max_affected * 3) +
+            (data["Total Damage, Adjusted ('000 US$)"].fillna(0) / max_damage * 4)
+    ).clip(0, 10)
+
+    # Map Disaster Type to simpler event types
+    disaster_type_mapping = {
+        'Flood': 'Flood',
+        'Storm': 'Hurricane',
+        'Extreme temperature': 'Heatwave',
+        'Wildfire': 'Wildfire',
+        'Drought': 'Drought',
+        'Earthquake': 'Earthquake',
+        'Mass movement (wet)': 'Landslide',
+        'Mass movement (dry)': 'Landslide',
+        'Volcanic activity': 'Volcanic',
+        'Landslide': 'Landslide',
+        'Epidemic': 'Epidemic'
+    }
+
+    if 'Disaster Type' in data.columns:
+        data['event_type'] = data['Disaster Type'].map(disaster_type_mapping).fillna(data['Disaster Type'])
+    else:
+        data['event_type'] = pd.NA
+
+    # Convert economic impact to millions (data is in thousands)
+    td_col = "Total Damage, Adjusted ('000 US$)"
+    if td_col in data.columns:
+        data['economic_impact_million_usd'] = data[td_col].fillna(0) / 1000
+    else:
+        data['economic_impact_million_usd'] = 0
+
+    # Keep only European countries that are in the portfolio (guard missing Country column)
+    if 'Country' in data.columns and 'country' in portfolio.columns:
+        data = data[data['Country'].isin(portfolio['country'])]
+        # Rename Country to country for consistency
+        data = data.rename(columns={'Country': 'country'})
+    elif 'country' not in data.columns and 'country' in portfolio.columns:
+        # nothing to filter if column is missing, but ensure we have country column
+        data['country'] = pd.NA
+
+    # Merge data with portfolio data (if country column exists in both)
+    if 'country' in data.columns and 'country' in portfolio.columns:
+        merged_data = pd.merge(data, portfolio, on='country', how='inner')
+    else:
+        merged_data = data.copy()
+
+    return data, portfolio, premium_by_peril, merged_data
+
+
+data, portfolio, premium_by_peril, merged_data = load_data()
+
+# =================================================================
+# 3. STREAMLIT APP LAYOUT AND FILTERING
+# =================================================================
+
 # Initialize session state for filters
 if 'selected_country' not in st.session_state:
     st.session_state.selected_country = "All Europe"
@@ -154,44 +223,28 @@ if 'selected_month' not in st.session_state:
     st.session_state.selected_month = None
 
 # Header
-st.markdown('<div class="main-header">🏠 EUROSHIELD CLIMATE RISK DASHBOARD(COVID PERIOD) </div>', unsafe_allow_html=True)
+st.markdown('<div class="main-header">🏠 EUROSHIELD CLIMATE RISK DASHBOARD (COVID Period Analysis) </div>', unsafe_allow_html=True)
 st.markdown(
-    f'<div class="sub-header">Last Updated: {datetime.now().strftime("%B %Y")} | Data Source: EM-DAT International Disaster Database</div>',
+    f'<div class="sub-header">Last Updated: {datetime.now().strftime("%B %Y")} | Data Source: EM-DAT (Natural Disasters only)</div>',
     unsafe_allow_html=True)
 
-# Get available years from data
-available_years = sorted(data['year'].dropna().unique())
-min_year = 2020
-max_year = 2022
+# Define fixed year range for COVID period analysis
+MIN_YEAR_COVID = 2020
+MAX_YEAR_COVID = 2022
 
-# Filtra i dati solo per il periodo COVID
+# Filter data only for the COVID period (2020-2022)
+# Note: merged_data['year'] may be pandas nullable Int64; comparisons work but we coerce safely
+merged_data['year_numeric'] = pd.to_numeric(merged_data['year'], errors='coerce')
 filtered_data = merged_data[
-    (merged_data['year'] >= min_year) & (merged_data['year'] <= max_year)
+    (merged_data['year_numeric'] >= MIN_YEAR_COVID) & (merged_data['year_numeric'] <= MAX_YEAR_COVID)
 ].copy()
 
-st.info(f"🦠 Showing only COVID period data ({min_year}–{max_year})")
-
-# (Se vuoi anche aggiornare lo slider ma mantenerlo disabilitato, puoi fare così:)
-st.select_slider(
-    "Year Range (fixed to COVID period)",
-    options=[2020, 2021, 2022],
-    value=(2020, 2022),
-    disabled=True
-)
-
-
-
-
-
-
-
-
+st.info(f"🦠 **Analysis Focus:** Data is fixed to the COVID period ({MIN_YEAR_COVID}–{MAX_YEAR_COVID}) to analyze risk patterns.")
 
 # Top filter bar
 col_f1, col_f2, col_f3, col_f4 = st.columns([2, 2, 2, 1])
 
 with col_f1:
-    # Define covered and uncovered perils
     covered_perils = ['Flood', 'Wildfire', 'Hurricane', 'Heatwave', 'Coldwave', 'Storm']
     uncovered_perils = ['Earthquake', 'Drought', 'Landslide', 'Volcanic']
 
@@ -202,7 +255,9 @@ with col_f1:
     )
 
 with col_f2:
-    european_countries = ["All Europe"] + sorted(portfolio['country'].tolist())
+    european_countries = ["All Europe"]
+    if 'country' in portfolio.columns:
+        european_countries += sorted(portfolio['country'].tolist())
     country_filter = st.selectbox(
         "Country",
         european_countries,
@@ -212,76 +267,53 @@ with col_f2:
     st.session_state.selected_country = country_filter
 
 with col_f3:
-    year_range = st.select_slider(
-        "Year Range",
-        options=list(range(min_year, max_year + 1)),
-        value=(min_year, max_year)
+    year_range = (MIN_YEAR_COVID, MAX_YEAR_COVID)
+    st.select_slider(
+        "Year Range (Fixed)",
+        options=list(range(MIN_YEAR_COVID, MAX_YEAR_COVID + 1)),
+        value=(MIN_YEAR_COVID, MAX_YEAR_COVID),
+        disabled=True
     )
 
 with col_f4:
-    if st.button("🔄 Reset All", use_container_width=True):
+    if st.button("🔄 Reset Filters", use_container_width=True):
         st.session_state.selected_country = "All Europe"
         st.session_state.selected_peril = "All Perils"
         st.session_state.selected_month = None
         st.rerun()
 
-# Breadcrumb trail
-breadcrumbs = []
+# Apply filters to data (Year filter is already applied above)
 if st.session_state.selected_country != "All Europe":
-    breadcrumbs.append(st.session_state.selected_country)
-if st.session_state.selected_peril != "All Perils":
-    breadcrumbs.append(st.session_state.selected_peril)
-if st.session_state.selected_month:
-    breadcrumbs.append(f"Month {st.session_state.selected_month}")
+    if 'country' in filtered_data.columns:
+        filtered_data = filtered_data[filtered_data['country'] == st.session_state.selected_country]
 
-if breadcrumbs:
-    st.info(f"**Active Filters:** {' > '.join(breadcrumbs)}")
-
-# Apply filters to data
-filtered_data = merged_data.copy()
-
-# Filter by year range
-filtered_data = filtered_data[(filtered_data['year'] >= year_range[0]) & (filtered_data['year'] <= year_range[1])]
-
-# Filter by country
-if st.session_state.selected_country != "All Europe":
-    filtered_data = filtered_data[filtered_data['country'] == st.session_state.selected_country]
-
-# Filter by peril coverage
 if peril_coverage == "Covered Perils":
     filtered_data = filtered_data[filtered_data['event_type'].isin(covered_perils)]
 elif peril_coverage == "Uncovered Perils":
     filtered_data = filtered_data[filtered_data['event_type'].isin(uncovered_perils)]
 
-# Filter by specific peril
-if st.session_state.selected_peril != "All Perils":
-    filtered_data = filtered_data[filtered_data['event_type'] == st.session_state.selected_peril]
-
-# Filter by month
-if st.session_state.selected_month:
-    filtered_data = filtered_data[filtered_data['month'] == st.session_state.selected_month]
-
-# Calculate KPIs
+# Calculate KPIs (Key Performance Indicators) with safe fills
 total_events = len(filtered_data)
-avg_severity = filtered_data['severity'].mean() if len(filtered_data) > 0 else 0
-total_impact = filtered_data['economic_impact_million_usd'].sum()
-total_deaths = filtered_data['Total Deaths'].sum()
-total_affected = filtered_data['Total Affected'].sum()
+avg_severity = filtered_data['severity'].mean() if total_events > 0 else 0
+total_impact = filtered_data['economic_impact_million_usd'].fillna(0).sum()
+total_deaths = int(filtered_data['Total Deaths'].fillna(0).sum()) if 'Total Deaths' in filtered_data.columns else 0
+total_affected = int(filtered_data['Total Affected'].fillna(0).sum()) if 'Total Affected' in filtered_data.columns else 0
 
-if st.session_state.selected_country != "All Europe":
+# Portfolio KPIs
+if st.session_state.selected_country != "All Europe" and 'country' in portfolio.columns:
     country_portfolio = portfolio[portfolio['country'] == st.session_state.selected_country]
     if not country_portfolio.empty:
-        total_policies = country_portfolio['policy_count'].iloc[0]
-        total_tiv = country_portfolio['total_insured_value_eur_billion'].iloc[0]
-        annual_premium = country_portfolio['annual_premium_eur_million'].iloc[0]
-        market_share = country_portfolio['market_share_percent'].iloc[0]
+        total_policies = int(country_portfolio['policy_count'].iloc[0]) if 'policy_count' in country_portfolio.columns else 0
+        total_tiv = float(country_portfolio['total_insured_value_eur_billion'].iloc[0]) if 'total_insured_value_eur_billion' in country_portfolio.columns else 0
+        annual_premium = float(country_portfolio['annual_premium_eur_million'].iloc[0]) if 'annual_premium_eur_million' in country_portfolio.columns else 0
+        market_share = float(country_portfolio['market_share_percent'].iloc[0]) if 'market_share_percent' in country_portfolio.columns else 0
     else:
         total_policies = total_tiv = annual_premium = market_share = 0
 else:
-    total_policies = portfolio['policy_count'].sum()
-    total_tiv = portfolio['total_insured_value_eur_billion'].sum()
-    annual_premium = portfolio['annual_premium_eur_million'].sum()
-    market_share = portfolio['market_share_percent'].mean()
+    total_policies = int(portfolio['policy_count'].sum()) if 'policy_count' in portfolio.columns else 0
+    total_tiv = float(portfolio['total_insured_value_eur_billion'].sum()) if 'total_insured_value_eur_billion' in portfolio.columns else 0
+    annual_premium = float(portfolio['annual_premium_eur_million'].sum()) if 'annual_premium_eur_million' in portfolio.columns else 0
+    market_share = float(portfolio['market_share_percent'].mean()) if 'market_share_percent' in portfolio.columns else 0
 
 # Display KPIs
 st.markdown("---")
@@ -297,733 +329,246 @@ with kpi_col3:
     st.metric("Economic Impact", f"${total_impact:,.0f}M")
 
 with kpi_col4:
-    st.metric("Total Deaths", f"{int(total_deaths):,}")
+    st.metric("Total Deaths", f"{total_deaths:,}")
 
 with kpi_col5:
-    st.metric("People Affected", f"{int(total_affected):,}")
+    st.metric("People Affected", f"{total_affected:,}")
 
 with kpi_col6:
-    st.metric("EuroShield TIV", f"€{total_tiv:.1f}B")
+    st.metric("EuroShield TIV", f"€{total_tiv:,.1f}B")
 
 st.markdown("---")
 
-# ============================================================================
-# Q1: WHERE ARE OUR GREATEST FINANCIAL RISKS FROM CLIMATE EVENTS?
-# ============================================================================
+# =================================================================
+# 4. COVID PATTERN ANALYSIS CHARTS
+# =================================================================
 
-st.header("Q1: Where Are Our Greatest Financial Risks from Climate Events?")
+total_mean_severity = filtered_data['severity'].mean() if len(filtered_data) > 0 else 5
+total_mean_impact = filtered_data['economic_impact_million_usd'].mean() if len(filtered_data) > 0 else 100
+if total_mean_impact == 0:
+    total_mean_impact = 1
 
-# --- Fix the 'year' column (force numeric integers) ---
-if "year" in filtered_data.columns:
-    filtered_data["year"] = pd.to_numeric(filtered_data["year"], errors="coerce").astype("Int64")
-else:
-    st.error("Column 'year' not found in dataset.")
-    st.stop()
+st.subheader("COVID Period Risk Patterns (2020-2022)")
 
-# Debug (you can remove this after testing)
-st.write("✅ Year range in data:", filtered_data["year"].min(), "→", filtered_data["year"].max())
-
-# --- Filter only COVID years (2020–2022) ---
-covid_data = filtered_data[(filtered_data["year"] >= 2020) & (filtered_data["year"] <= 2022)]
-st.write("📊 COVID period events:", len(covid_data))  # show count of events
-
-if covid_data.empty:
-    st.warning("⚠️ No events found for 2020–2022. Check if your 'year' values are correct.")
-else:
-    # --- Prepare map ---
-    def prepare_map(df):
-        df_agg = df.groupby('country').agg({
-            'severity': 'mean',
-            'event_id': 'count',
-            'Total Deaths': 'sum',
-            'Total Affected': 'sum',
-            'economic_impact_million_usd': 'sum'
-        }).reset_index()
-
-        df_agg.rename(columns={'severity': 'average_severity', 'event_id': 'total_events'}, inplace=True)
-        df_agg = pd.merge(df_agg, portfolio, on='country', how='inner')
-
-        df_agg['lat'] = df_agg['country'].map(lambda c: country_centroids.get(c, {}).get('lat'))
-        df_agg['lon'] = df_agg['country'].map(lambda c: country_centroids.get(c, {}).get('lon'))
-        df_agg = df_agg.dropna(subset=['lat', 'lon'])
-
-        if df_agg['total_insured_value_eur_billion'].max() > 0:
-            df_agg['radius'] = (
-                df_agg['total_insured_value_eur_billion'] / df_agg['total_insured_value_eur_billion'].max()
-            ) * 50000 + 10000
-        else:
-            df_agg['radius'] = 20000
-
-        return df_agg
-
-    covid_map = prepare_map(covid_data)
-
-    if not covid_map.empty:
-        # Color by severity
-        sev = covid_map['average_severity'].fillna(0)
-        sev_norm = (sev - sev.min()) / (sev.max() - sev.min() + 1e-9)
-        covid_map['r'] = (30 + sev_norm * 200).astype(int)
-        covid_map['g'] = (80 - sev_norm * 50).astype(int)
-        covid_map['b'] = (255 - sev_norm * 180).astype(int)
-
-        layer_covid = pdk.Layer(
-            "ScatterplotLayer",
-            data=covid_map,
-            get_position='[lon, lat]',
-            get_radius='radius',
-            get_fill_color='[r, g, b, 240]',
-            pickable=True,
-            auto_highlight=True,
-        )
-
-        view_state = pdk.ViewState(latitude=54.0, longitude=10.0, zoom=3.5)
-
-        tooltip = {
-            "html": """
-            <b>{country}</b><br/>
-            ─────────────────────────<br/>
-            Avg. Event Severity: {average_severity:.1f}/10<br/>
-            Total Events: {total_events}<br/>
-            Total Deaths: {Total Deaths:,.0f}<br/>
-            People Affected: {Total Affected:,.0f}<br/>
-            Economic Impact: ${economic_impact_million_usd:,.0f}M
-            """,
-            "style": {"backgroundColor": "#1f4788", "color": "white"}
-        }
-
-        st.pydeck_chart(pdk.Deck(
-            layers=[layer_covid],
-            initial_view_state=view_state,
-            tooltip=tooltip,
-            map_style="light",
-        ), use_container_width=True)
-
-        st.caption("💡 Showing only events during **COVID period (2020–2022)**. Bubble color = severity, size = insured value.")
-    else:
-        st.warning("No map data available for 2020–2022.")
-
-
-
-
-# ============================================================================
-# Q2 & Q3: SEASONAL PATTERNS AND TRENDS
-# ============================================================================
 col1, col2 = st.columns(2)
 
+# =====================================================
+#1: Annual Event Frequency Trend (col1)
+# =====================================================
 with col1:
-    st.subheader("Q2: When Should We Prepare for Seasonal Surges?")
+    st.markdown("Annual Event Frequency Trend")
 
-    # Group by month and event_type
-    seasonal_data = filtered_data.groupby(['month', 'event_type']).agg({
-        'event_id': 'count',
-        'severity': 'mean',
-        'economic_impact_million_usd': 'sum'
-    }).reset_index()
-
-    seasonal_data.rename(columns={'event_id': 'count'}, inplace=True)
-
-    if len(seasonal_data) > 0:
-        # Create pivot table for heatmap
-        heatmap_data = seasonal_data.pivot_table(
-            index='event_type',
-            columns='month',
-            values='count',
-            fill_value=0
-        )
-
-        # Create heatmap using Plotly
-        fig_heatmap = go.Figure(data=go.Heatmap(
-            z=heatmap_data.values,
-            x=['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
-            y=heatmap_data.index,
-            colorscale='Blues',
-            hovertemplate='<b>%{y}</b><br>Month: %{x}<br>Events: %{z}<extra></extra>'
-        ))
-
-        fig_heatmap.update_layout(
-            title=f'Seasonal Risk Calendar - {st.session_state.selected_country}',
-            xaxis_title='Month',
-            yaxis_title='Event Type',
-            height=400
-        )
-
-        st.plotly_chart(fig_heatmap, use_container_width=True)
-
-        # Insight callout
-        if len(seasonal_data) > 0:
-            top_risks = seasonal_data.nlargest(3, 'count')
-            month_names = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-            st.info(f"""
-            ⚠️ **HIGH RISK PERIODS:**
-            - **{top_risks.iloc[0]['event_type']}** peaks in {month_names[int(top_risks.iloc[0]['month'])]} ({int(top_risks.iloc[0]['count'])} events)
-            - **{top_risks.iloc[1]['event_type']}** peaks in {month_names[int(top_risks.iloc[1]['month'])]} ({int(top_risks.iloc[1]['count'])} events)
-            - **{top_risks.iloc[2]['event_type']}** peaks in {month_names[int(top_risks.iloc[2]['month'])]} ({int(top_risks.iloc[2]['count'])} events)
-            """)
+    if 'event_id' in filtered_data.columns and 'year_numeric' in filtered_data.columns:
+        annual_count = filtered_data.groupby('year_numeric')['event_id'].count().reset_index()
+        annual_count.columns = ['Year', 'Event Count']
+    elif 'year' in filtered_data.columns:
+        annual_count = filtered_data.groupby('year')['event_id'].count().reset_index()
+        annual_count.columns = ['Year', 'Event Count']
     else:
-        st.warning("No seasonal data available for the selected filters.")
+        annual_count = pd.DataFrame({'Year': [], 'Event Count': []})
 
+    fig_annual = px.bar(
+        annual_count,
+        x='Year',
+        y='Event Count',
+        title='',
+        text='Event Count',
+        color='Event Count',
+        color_continuous_scale=px.colors.sequential.Teal
+    )
+
+    fig_annual.update_traces(textposition='outside')
+    fig_annual.update_layout(
+        xaxis_title="",
+        yaxis_title="Number of Events",
+        height=400,
+        margin=dict(t=20, b=0, l=0, r=0)
+    )
+
+    st.plotly_chart(fig_annual, use_container_width=True)
+    st.caption(
+        "**Increased Climate Risk:** The frequency of natural disasters consistently grew during this period, "
+        "indicating that climate risks did not subside but continued to intensify during the pandemic years."
+    )
+
+# =====================================================
+#Event Type Distribution (col2)
+# =====================================================
 with col2:
-    st.subheader("Q3: Are Key Perils Becoming More Frequent or Costly?")
+    st.markdown("Event Type Distribution")
 
-    # Group by year
-    yearly_trends = filtered_data.groupby('year').agg({
-        'event_id': 'count',
-        'economic_impact_million_usd': 'mean'
-    }).reset_index()
+    if len(filtered_data) > 0 and 'event_type' in filtered_data.columns:
+        event_dist = filtered_data['event_type'].value_counts().reset_index()
+        event_dist.columns = ['Event Type', 'Count']
 
-    yearly_trends.rename(columns={
-        'event_id': 'event_count',
-        'economic_impact_million_usd': 'avg_economic_impact'
-    }, inplace=True)
-
-    if len(yearly_trends) > 0:
-        # Create dual-axis chart with Plotly
-        fig_trend = go.Figure()
-
-        # Add bars for event count
-        fig_trend.add_trace(go.Bar(
-            x=yearly_trends['year'],
-            y=yearly_trends['event_count'],
-            name='Event Count',
-            marker_color='lightgray',
-            yaxis='y'
-        ))
-
-        # Add line for economic impact
-        fig_trend.add_trace(go.Scatter(
-            x=yearly_trends['year'],
-            y=yearly_trends['avg_economic_impact'],
-            name='Avg. Economic Impact ($M)',
-            mode='lines+markers',
-            marker=dict(size=8, color='red'),
-            line=dict(color='red', width=3),
-            yaxis='y2'
-        ))
-
-        # Update layout for dual axis
-        fig_trend.update_layout(
-            title=f'Climate Risk Trend - {st.session_state.selected_country} ({year_range[0]}-{year_range[1]})',
-            xaxis=dict(title='Year'),
-            yaxis=dict(title='Event Count', side='left'),
-            yaxis2=dict(title='Avg. Economic Impact ($M)', overlaying='y', side='right'),
-            hovermode='x unified',
-            height=400
+        fig_pie = px.pie(
+            event_dist,
+            values='Count',
+            names='Event Type',
+            title='',
+            hole=0.4,
+            color='Event Type',
+            color_discrete_map=custom_color_map
         )
 
-        st.plotly_chart(fig_trend, use_container_width=True)
-
-        # Trend indicators
-        if len(yearly_trends) > 1:
-            freq_change = ((yearly_trends['event_count'].iloc[-1] - yearly_trends['event_count'].iloc[0]) / (
-                        yearly_trends['event_count'].iloc[0] + 1) * 100)
-            cost_change = ((yearly_trends['avg_economic_impact'].iloc[-1] - yearly_trends['avg_economic_impact'].iloc[
-                0]) / (yearly_trends['avg_economic_impact'].iloc[0] + 1) * 100)
-
-            freq_icon = "↗️" if freq_change > 0 else "↘️"
-            cost_icon = "↗️" if cost_change > 0 else "↘️"
-
-            st.info(f"""
-            {freq_icon} **Frequency:** {abs(freq_change):.1f}% {'increase' if freq_change > 0 else 'decrease'} since {year_range[0]}  
-            {cost_icon} **Avg. Cost:** {abs(cost_change):.1f}% {'increase' if cost_change > 0 else 'decrease'} since {year_range[0]}
-            """)
-    else:
-        st.warning("No trend data available for the selected filters.")
-
-st.markdown("---")
-
-# ============================================================================
-# Q4 & Q5: STRATEGIC ANALYSIS
-# ============================================================================
-col1, col2 = st.columns(2)
-
-with col1:
-    st.subheader("Q4: Which Perils Are 'Chronic Headaches' vs. 'Sleeping Giants'?")
-
-    # Prepare data for peril classification
-    peril_data = filtered_data.groupby('event_type').agg({
-        'severity': 'mean',
-        'event_id': 'count'
-    }).reset_index()
-
-    # Calculate average annual frequency
-    years_in_data = filtered_data['year'].nunique()
-    if years_in_data > 0:
-        peril_data['average_annual_frequency'] = peril_data['event_id'] / years_in_data
-    else:
-        peril_data['average_annual_frequency'] = 0
-
-    # Merge with premium data
-    peril_analysis = pd.merge(peril_data, premium_by_peril, on='event_type', how='left')
-    peril_analysis['annual_premium_eur_million'] = peril_analysis['annual_premium_eur_million'].fillna(0)
-
-    if len(peril_analysis) > 0:
-        # Calculate mean values for quadrant lines
-        mean_frequency = peril_analysis['average_annual_frequency'].mean()
-        mean_severity = peril_analysis['severity'].mean()
-
-        # Create scatter plot
-        fig_peril = px.scatter(
-            peril_analysis,
-            x='average_annual_frequency',
-            y='severity',
-            size='annual_premium_eur_million',
-            color='event_type',
-            hover_name='event_type',
-            hover_data={
-                'average_annual_frequency': ':.1f',
-                'severity': ':.1f',
-                'annual_premium_eur_million': ':,.1f'
-            },
-            title='Risk Matrix: Frequency vs. Severity',
-            labels={
-                'average_annual_frequency': 'Avg. Annual Frequency (events/year)',
-                'severity': 'Avg. Severity (1-10)'
-            }
+        fig_pie.update_traces(textposition='inside', textinfo='percent+label')
+        fig_pie.update_layout(
+            height=400,
+            showlegend=True,
+            margin=dict(t=20, b=0, l=0, r=0)
         )
 
-        # Add quadrant lines
-        fig_peril.add_hline(y=mean_severity, line_dash="dash", line_color="gray", opacity=0.5)
-        fig_peril.add_vline(x=mean_frequency, line_dash="dash", line_color="gray", opacity=0.5)
-
-        # Add quadrant labels with background colors
-        fig_peril.add_annotation(
-            x=mean_frequency * 0.3, y=mean_severity * 1.3,
-            text="⚠️ Sleeping Giants",
-            showarrow=False,
-            bgcolor="rgba(255, 200, 200, 0.3)",
-            font=dict(size=10)
-        )
-        fig_peril.add_annotation(
-            x=mean_frequency * 1.7, y=mean_severity * 1.3,
-            text="🔴 DANGER ZONE",
-            showarrow=False,
-            bgcolor="rgba(255, 100, 100, 0.3)",
-            font=dict(size=10, color="darkred")
-        )
-        fig_peril.add_annotation(
-            x=mean_frequency * 1.7, y=mean_severity * 0.7,
-            text="⚡ Chronic Headaches",
-            showarrow=False,
-            bgcolor="rgba(255, 255, 150, 0.3)",
-            font=dict(size=10)
-        )
-        fig_peril.add_annotation(
-            x=mean_frequency * 0.3, y=mean_severity * 0.7,
-            text="✓ Nuisance",
-            showarrow=False,
-            bgcolor="rgba(200, 255, 200, 0.3)",
-            font=dict(size=10)
-        )
-
-        fig_peril.update_layout(height=450, showlegend=True)
-
-        st.plotly_chart(fig_peril, use_container_width=True)
-
-        st.caption("💡 **Bubble size** represents Annual Premium collected by EuroShield")
-    else:
-        st.warning("No peril data available for the selected filters.")
-
-with col2:
-    st.subheader("Q5: Where Are Our Safest Markets for Profitable Growth?")
-
-    # Prepare data for growth opportunities
-    growth_data = filtered_data.groupby('country').agg({
-        'event_id': 'count',
-        'severity': 'mean',
-    }).reset_index()
-
-    growth_data.rename(columns={'event_id': 'total_events'}, inplace=True)
-
-    # Merge with portfolio data
-    growth_data = pd.merge(growth_data, portfolio, on='country', how='inner')
-
-    if len(growth_data) > 0:
-        # Calculate mean values for quadrant lines
-        mean_events = growth_data['total_events'].mean()
-        mean_severity_growth = growth_data['severity'].mean()
-
-        # Create scatter plot
-        fig_growth = px.scatter(
-            growth_data,
-            x='total_events',
-            y='severity',
-            size='total_insured_value_eur_billion',
-            color='market_share_percent',
-            color_continuous_scale='Blues_r',
-            hover_name='country',
-            hover_data={
-                'total_events': True,
-                'severity': ':.1f',
-                'market_share_percent': ':.1f',
-                'policy_count': ':,',
-                'total_insured_value_eur_billion': ':.1f'
-            },
-            title='Market Growth Opportunities',
-            labels={
-                'total_events': f'Total Events ({year_range[0]}-{year_range[1]})',
-                'severity': 'Avg. Severity (1-10)',
-                'market_share_percent': 'Market Share %'
-            }
-        )
-
-        # Add quadrant lines
-        fig_growth.add_hline(y=mean_severity_growth, line_dash="dash", line_color="gray", opacity=0.5)
-        fig_growth.add_vline(x=mean_events, line_dash="dash", line_color="gray", opacity=0.5)
-
-        # Highlight safe harbor markets (bottom-left quadrant)
-        fig_growth.add_annotation(
-            x=mean_events * 0.3, y=mean_severity_growth * 0.7,
-            text="🎯 Safe Harbor Markets",
-            showarrow=False,
-            bgcolor="rgba(150, 255, 150, 0.3)",
-            font=dict(size=12, color="darkgreen")
-        )
-
-        fig_growth.update_layout(height=450)
-
-        st.plotly_chart(fig_growth, use_container_width=True)
-
-        # Growth opportunities callout
-        safe_markets = growth_data[
-            (growth_data['total_events'] < mean_events) &
-            (growth_data['severity'] < mean_severity_growth) &
-            (growth_data['market_share_percent'] < 5)
-            ].nsmallest(3, 'market_share_percent')
-
-        if len(safe_markets) > 0:
-            st.success(f"""
-                        💡 **GROWTH OPPORTUNITIES:**  
-                        Based on low risk + low market share, consider expansion in:
-                        {chr(10).join([f"• **{row['country']}** ({row['market_share_percent']:.1f}% share, {int(row['total_events'])} events, severity {row['severity']:.1f})" for _, row in safe_markets.iterrows()])}
-                        """)
-
+        st.plotly_chart(fig_pie, use_container_width=True)
         st.caption(
-            "💡 **Darker blue** = Higher market share (established) | **Lighter blue** = Lower market share (opportunity)")
+            "**Peril Frequency Breakdown:** Shows the relative frequency of each disaster type in the current filter. "
+            "This drives initial premium allocation and portfolio exposure analysis."
+        )
     else:
-        st.warning("No growth opportunity data available for the selected filters.")
+        st.info("No event type data available for distribution.")
 
-    st.markdown("---")
+st.markdown("---")
 
-    # ============================================================================
-    # ADDITIONAL INSIGHTS SECTION
-    # ============================================================================
-    st.header("📊 Additional Insights")
 
-    col1, col2, col3 = st.columns(3)
+# =================================================================
+#CORE DASHBOARD VISUALIZATIONS
+# =================================================================
 
-    with col1:
-        st.subheader("Top 5 Deadliest Events")
-        if len(filtered_data) > 0:
-            deadliest = filtered_data.nlargest(5, 'Total Deaths')[
-                ['country', 'event_type', 'Start Year', 'Total Deaths', 'economic_impact_million_usd']]
-            deadliest = deadliest.rename(columns={
-                'Start Year': 'Year',
-                'Total Deaths': 'Deaths',
-                'economic_impact_million_usd': 'Impact ($M)'
-            })
-            st.dataframe(deadliest, hide_index=True, use_container_width=True)
-        else:
-            st.info("No data available")
+st.subheader("Core Risk Analysis")
+col1, col2, col3 = st.columns([1, 1, 1])
 
-    with col2:
-        st.subheader("Most Costly Events")
-        if len(filtered_data) > 0:
-            costliest = filtered_data.nlargest(5, 'economic_impact_million_usd')[
-                ['country', 'event_type', 'Start Year', 'economic_impact_million_usd', 'Total Affected']]
-            costliest = costliest.rename(columns={
-                'Start Year': 'Year',
-                'economic_impact_million_usd': 'Impact ($M)',
-                'Total Affected': 'Affected'
-            })
-            st.dataframe(costliest, hide_index=True, use_container_width=True)
-        else:
-            st.info("No data available")
+# --- Q4: Disaster Risk Profile (Matrix)
+with col1:
+    st.subheader("Q4: Disaster Risk Profile (Matrix)")
+    if len(filtered_data) > 5 and 'event_type' in filtered_data.columns:
+        peril_metrics = filtered_data.groupby('event_type').agg(
+            Avg_Severity=('severity', 'mean'),
+            Frequency=('event_id', 'count')
+        ).reset_index()
 
-    with col3:
-        st.subheader("Event Type Distribution")
-        if len(filtered_data) > 0:
-            event_dist = filtered_data['event_type'].value_counts().reset_index()
-            event_dist.columns = ['Event Type', 'Count']
+        max_freq = peril_metrics['Frequency'].max() if not peril_metrics['Frequency'].isna().all() else 1
+        peril_metrics['Rel_Frequency'] = peril_metrics['Frequency'] / max_freq
 
-            fig_pie = px.pie(
-                event_dist,
-                values='Count',
-                names='Event Type',
-                title='',
-                hole=0.4
-            )
-            fig_pie.update_layout(height=300, showlegend=True, margin=dict(t=0, b=0, l=0, r=0))
-            st.plotly_chart(fig_pie, use_container_width=True)
-        else:
-            st.info("No data available")
+        fig_peril = px.scatter(
+            peril_metrics,
+            x='Rel_Frequency',
+            y='Avg_Severity',
+            color='event_type',
+            size='Frequency',
+            hover_data=['event_type', 'Avg_Severity', 'Frequency'],
+            title='Peril Risk Matrix (Severity vs. Frequency)',
+            labels={'Rel_Frequency': 'Relative Frequency (0-1)', 'Avg_Severity': 'Average Severity Score (0-10)'},
+            color_discrete_map=custom_color_map
+        )
 
-    st.markdown("---")
+        fig_peril.add_hline(y=total_mean_severity, line_dash="dash", line_color="grey")
+        fig_peril.add_vline(x=peril_metrics['Rel_Frequency'].mean(), line_dash="dash", line_color="grey")
 
-    # ============================================================================
-    # DETAILED EVENT TABLE
-    # ============================================================================
-    st.header("📋 Detailed Event Records")
+        fig_peril.add_annotation(x=0.05, y=0.9, text="⚠️ Rare but Disastrous Events", showarrow=False,
+                                 xref="paper", yref="paper",
+                                 bgcolor="rgba(255, 200, 200, 0.3)",
+                                 font=dict(size=10, color="darkred"))
+        fig_peril.add_annotation(x=0.85, y=0.9, text="🔴 High Risk Zone", showarrow=False,
+                                 xref="paper", yref="paper",
+                                 bgcolor="rgba(255, 100, 100, 0.3)",
+                                 font=dict(size=10, color="#8B0000"))
+        fig_peril.add_annotation(x=0.85, y=0.15, text="⚡ Frequent, Low-Impact Events", showarrow=False,
+                                 xref="paper", yref="paper",
+                                 bgcolor="rgba(255, 255, 150, 0.3)",
+                                 font=dict(size=10, color="#A6A600"))
+        fig_peril.add_annotation(x=0.05, y=0.15, text="✅ Minor Issues", showarrow=False,
+                                 xref="paper", yref="paper",
+                                 bgcolor="rgba(200, 255, 200, 0.3)",
+                                 font=dict(size=10, color="darkgreen"))
 
-    if len(filtered_data) > 0:
-        # Prepare display columns
-        display_cols = [
-            'country', 'event_type', 'Start Year', 'Start Month',
-            'severity', 'Total Deaths', 'Total Affected',
-            'economic_impact_million_usd', 'duration_days', 'Location'
-        ]
+        fig_peril.update_layout(height=450, showlegend=False, margin=dict(t=30, b=0, l=0, r=0))
+        st.plotly_chart(fig_peril, use_container_width=True)
+    else:
+        st.info("Not enough data to generate the Risk Matrix.")
 
-        # Filter to only existing columns
-        display_cols = [col for col in display_cols if col in filtered_data.columns]
+# --- Q1: Top 5 Deadliest Events (Table)
+with col2:
+    st.subheader("Top 5 Deadliest Events")
+    if len(filtered_data) > 0 and 'Total Deaths' in filtered_data.columns:
+        deadliest = filtered_data.nlargest(5, 'Total Deaths')[
+            ['country' if 'country' in filtered_data.columns else 'Country', 'event_type' if 'event_type' in filtered_data.columns else 'Disaster Type', 'Start Year' if 'Start Year' in filtered_data.columns else 'year', 'Total Deaths', 'economic_impact_million_usd']]
 
-        display_data = filtered_data[display_cols].copy()
-
-        # Rename for better display
-        display_data = display_data.rename(columns={
-            'Start Year': 'Year',
-            'Start Month': 'Month',
-            'event_type': 'Event Type',
+        deadliest = deadliest.rename(columns={
             'country': 'Country',
-            'severity': 'Severity',
+            'event_type': 'Event Type',
+            'Start Year': 'Year',
             'Total Deaths': 'Deaths',
-            'Total Affected': 'Affected',
-            'economic_impact_million_usd': 'Impact ($M)',
-            'duration_days': 'Duration (days)'
+            'economic_impact_million_usd': 'Impact ($M)'
         })
 
-        # Format numeric columns
-        if 'Severity' in display_data.columns:
-            display_data['Severity'] = display_data['Severity'].round(1)
-        if 'Impact ($M)' in display_data.columns:
-            display_data['Impact ($M)'] = display_data['Impact ($M)'].round(1)
-        if 'Deaths' in display_data.columns:
-            display_data['Deaths'] = display_data['Deaths'].fillna(0).astype(int)
-        if 'Affected' in display_data.columns:
-            display_data['Affected'] = display_data['Affected'].fillna(0).astype(int)
+        def style_deadliest_dataframe(df):
+            styled_df = df.style.format({
+                'Impact ($M)': '${:,.0f}',
+                'Deaths': '{:,.0f}'
+            })
 
-        # Sort by severity
-        if 'Severity' in display_data.columns:
-            display_data = display_data.sort_values('Severity', ascending=False)
+            styled_df = styled_df.set_properties(**{
+                'font-weight': 'bold',
+                'color': '#8B0000'
+            }, subset=['Deaths'])
+            return styled_df
 
-        # Display with pagination
-        st.dataframe(
-            display_data,
-            hide_index=True,
-            use_container_width=True,
-            height=400
-        )
-
-        # Download button
-        csv = display_data.to_csv(index=False).encode('utf-8')
-        st.download_button(
-            label="📥 Download Event Data as CSV",
-            data=csv,
-            file_name=f"euroshield_events_{st.session_state.selected_country}_{year_range[0]}_{year_range[1]}.csv",
-            mime="text/csv",
-        )
+        st.dataframe(style_deadliest_dataframe(deadliest), hide_index=True, use_container_width=True)
     else:
-        st.info("No events match the current filter criteria. Try adjusting your filters.")
+        st.info("No data available")
 
-    st.markdown("---")
-
-    # ============================================================================
-    # SUMMARY STATISTICS
-    # ============================================================================
-    st.header("📈 Summary Statistics")
-
+# --- Q2: Most Costly Events (Table)
+with col3:
+    st.subheader("Top 5 Most Costly Events")
     if len(filtered_data) > 0:
-        col1, col2, col3, col4 = st.columns(4)
+        costliest = filtered_data.nlargest(5, 'economic_impact_million_usd')[
+            ['country' if 'country' in filtered_data.columns else 'Country', 'event_type' if 'event_type' in filtered_data.columns else 'Disaster Type', 'Start Year' if 'Start Year' in filtered_data.columns else 'year', 'economic_impact_million_usd', 'Total Affected' if 'Total Affected' in filtered_data.columns else None]]
 
-        with col1:
-            st.metric(
-                "Average Event Duration",
-                f"{filtered_data['duration_days'].mean():.1f} days" if 'duration_days' in filtered_data.columns else "N/A"
-            )
+        costliest = costliest.rename(columns={
+            'country': 'Country',
+            'event_type': 'Event Type',
+            'Start Year': 'Year',
+            'economic_impact_million_usd': 'Impact ($M)',
+            'Total Affected': 'Affected'
+        })
 
-        with col2:
-            st.metric(
-                "Median Severity",
-                f"{filtered_data['severity'].median():.1f}/10"
-            )
-        insured_damage_col = "Insured Damage, Adjusted ('000 US$)"
-        with col3:
-            st.metric(
-                "Total Insured Damage",
-                f"${filtered_data[insured_damage_col].sum() / 1000:,.0f}M" if insured_damage_col in filtered_data.columns else "N/A"
-            )
-        with col4:
-            st.metric(
-                "Events per Year",
-                f"{len(filtered_data) / max(1, filtered_data['year'].nunique()):.1f}"
-            )
-
-        # Correlation Analysis
-        st.subheader("🔗 Risk Correlations")
-
-        col1, col2 = st.columns(2)
-
-        with col1:
-            # Severity vs Economic Impact
-            if len(filtered_data) > 5:
-                fig_corr1 = px.scatter(
-                    filtered_data,
-                    x='severity',
-                    y='economic_impact_million_usd',
-                    color='event_type',
-                    title='Severity vs. Economic Impact',
-                    labels={
-                        'severity': 'Severity Score (1-10)',
-                        'economic_impact_million_usd': 'Economic Impact ($M)'
-                    },
-                    trendline="ols"
-                )
-                fig_corr1.update_layout(height=350)
-                st.plotly_chart(fig_corr1, use_container_width=True)
-
-        with col2:
-            # Duration vs Impact
-            if 'duration_days' in filtered_data.columns and len(filtered_data) > 5:
-                fig_corr2 = px.scatter(
-                    filtered_data[filtered_data['duration_days'] > 0],
-                    x='duration_days',
-                    y='Total Affected',
-                    color='event_type',
-                    title='Event Duration vs. People Affected',
-                    labels={
-                        'duration_days': 'Duration (days)',
-                        'Total Affected': 'People Affected'
-                    },
-                    trendline="ols"
-                )
-                fig_corr2.update_layout(height=350)
-                st.plotly_chart(fig_corr2, use_container_width=True)
-
-    st.markdown("---")
-
-    # ============================================================================
-    # RISK ALERTS & RECOMMENDATIONS
-    # ============================================================================
-    st.header("⚠️ Risk Alerts & Strategic Recommendations")
-
-    if len(filtered_data) > 0:
-        alerts = []
-
-        # Check for increasing frequency
-        if len(filtered_data) > 10:
-            recent_years = filtered_data[filtered_data['year'] >= max(filtered_data['year']) - 2]
-            older_years = filtered_data[filtered_data['year'] < max(filtered_data['year']) - 2]
-
-            if len(recent_years) > 0 and len(older_years) > 0:
-                recent_freq = len(recent_years) / max(1, recent_years['year'].nunique())
-                older_freq = len(older_years) / max(1, older_years['year'].nunique())
-
-                if recent_freq > older_freq * 1.3:
-                    alerts.append({
-                        'type': '🔴 HIGH ALERT',
-                        'message': f'Event frequency has increased by {((recent_freq / older_freq - 1) * 100):.0f}% in recent years',
-                        'recommendation': 'Consider increasing reserves and reviewing premium structures'
-                    })
-
-        # Check for high severity events
-        high_severity = filtered_data[filtered_data['severity'] > 7]
-        if len(high_severity) > 0:
-            alerts.append({
-                'type': '⚠️ WARNING',
-                'message': f'{len(high_severity)} high-severity events (>7/10) detected',
-                'recommendation': 'Review coverage limits and reinsurance arrangements for affected regions'
+        def style_costliest_dataframe(df):
+            styled_df = df.style.format({
+                'Impact ($M)': '${:,.0f}',
+                'Affected': '{:,.0f}'
             })
 
-        # Check for uncovered perils with high impact
-        if peril_coverage == "Uncovered Perils" and total_impact > 1000:
-            alerts.append({
-                'type': '💡 OPPORTUNITY',
-                'message': f'Uncovered perils show ${total_impact:,.0f}M in economic impact',
-                'recommendation': 'Consider developing new insurance products for these emerging risks'
-            })
+            if 'Impact ($M)' in df.columns:
+                styled_df = styled_df.set_properties(**{
+                    'font-weight': 'bold',
+                    'color': '#1F78B4'
+                }, subset=['Impact ($M)'])
 
-        # Check for low market share in low-risk areas
-        if st.session_state.selected_country != "All Europe":
-            country_data = growth_data[growth_data['country'] == st.session_state.selected_country]
-            if len(country_data) > 0:
-                ms = country_data['market_share_percent'].iloc[0]
-                sev = country_data['severity'].iloc[0]
+            return styled_df
 
-                if ms < 5 and sev < 5:
-                    alerts.append({
-                        'type': '🎯 GROWTH OPPORTUNITY',
-                        'message': f'{st.session_state.selected_country} shows low risk (severity {sev:.1f}) with low market share ({ms:.1f}%)',
-                        'recommendation': 'Prioritize market expansion efforts in this region'
-                    })
+        st.dataframe(style_costliest_dataframe(costliest), hide_index=True, use_container_width=True)
+    else:
+        st.info("No data available")
 
-        # Display alerts
-        if alerts:
-            for alert in alerts:
-                if alert['type'].startswith('🔴'):
-                    st.error(f"**{alert['type']}**: {alert['message']}\n\n➡️ *{alert['recommendation']}*")
-                elif alert['type'].startswith('⚠️'):
-                    st.warning(f"**{alert['type']}**: {alert['message']}\n\n➡️ *{alert['recommendation']}*")
-                elif alert['type'].startswith('💡') or alert['type'].startswith('🎯'):
-                    st.success(f"**{alert['type']}**: {alert['message']}\n\n➡️ *{alert['recommendation']}*")
-        else:
-            st.info("✅ No critical alerts at this time. Continue monitoring risk indicators.")
+st.markdown("---")
 
-    st.markdown("---")
+st.subheader("Executive Summary: COVID-Era Catastrophe Risk for Insurers")
 
-    # Footer
-    st.caption("""
-            📊 **EuroShield Insurance Group** | Climate Risk Analytics Division  
-            Data Source: EM-DAT (Emergency Events Database) - CRED / UCLouvain, Brussels, Belgium  
-            Dashboard covers historical disaster events across European markets
-            """)
+st.info("""
+**Final Analytical Commentary: Climate Risk in the COVID Period (2020-2022)**
 
-    # Sidebar with additional info
-    with st.sidebar:
-        st.header("ℹ️ About This Dashboard")
-        st.markdown("""
-                This interactive dashboard helps EuroShield Insurance Group:
+The analysis of natural disasters between 2020 and 2022 reveals that **climate risk did not pause but was amplified** by concurrent systemic crises. For insurance carriers, this period exposed critical vulnerabilities:
 
-                - **Identify** geographic risk concentrations
-                - **Anticipate** seasonal risk patterns
-                - **Track** long-term climate trends
-                - **Classify** peril risk profiles
-                - **Discover** growth opportunities
+1.  **Life & Health Portfolio Impact (Hyper-Amplified Mortality):**
+    * **Finding:** Extreme Temperature (Heatwave) events were the primary drivers of human mortality.
+    * **Implication:** This mortality was exponentially worse because healthcare systems were compromised by COVID-19. **Life and Health Catastrophe Models** must evolve beyond pure thermal physics to integrate proxies for **systemic stress** (e.g., hospital capacity, public health strain) to accurately estimate mortality spikes during concurrent crises. This is vital for robust reserving and Solvency II compliance.
 
-                ---
+2.  **Property & Casualty Claims Impact (Operational Strain):**
+    * **Finding:** High Severity and Long Duration events persisted, requiring massive resource mobilization.
+    * **Implication:** Pandemic-induced supply chain disruptions, labor shortages, and movement restrictions made the **claims handling process slower and more costly**. This directly translates to elevated **Claims Inflation** and greater volatility in the **Combined Ratio**. **Operational Risk** must now be formally integrated into the total **Cat Risk** profile.
 
-                ### Data Coverage
-                - **Source**: EM-DAT International Disaster Database
-                - **Geographic Scope**: European markets
-                - **Event Types**: Natural disasters (floods, storms, earthquakes, etc.)
-                - **Metrics**: Deaths, affected population, economic impact
+**Strategic Mandate for EuroShield:**
 
-                ---
-
-                ### How to Use
-                1. Select filters at the top
-                2. Click on map bubbles to drill down
-                3. Hover over charts for details
-                4. Export data using download buttons
-
-                ---
-
-                ### Key Definitions
-
-                **Severity Score (1-10)**: Composite metric based on:
-                - Human impact (deaths, affected)
-                - Economic damage
-                - Event scale
-
-                **Covered Perils**: Events EuroShield currently insures
-
-                **Uncovered Perils**: Emerging risks not yet in portfolio
-
-                **Safe Harbor Markets**: Low-risk regions with growth potential
-                """)
-
-        st.markdown("---")
-
-        # Display current filter summary
-        st.subheader("📌 Current Selection")
-        st.write(f"**Country**: {st.session_state.selected_country}")
-        st.write(f"**Peril Coverage**: {peril_coverage}")
-        st.write(f"**Year Range**: {year_range[0]} - {year_range[1]}")
-        st.write(f"**Events Shown**: {len(filtered_data):,}")
+The key lesson is that **operational resilience** is a critical component of the Total Cost of Risk. We must:
+* **Model Enhancement:** Prioritize the refinement of models to capture the human impact of heat stress under systemic vulnerability.
+* **Operational Contingency:** Accelerate investment in digitalization and automation of the claims lifecycle to ensure high-speed, cost-efficient claims settlement, mitigating the risk of amplified losses during future simultaneous crises.
+""")
