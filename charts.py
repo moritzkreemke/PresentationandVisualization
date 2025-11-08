@@ -31,6 +31,7 @@ def render_q1_map(filtered_data: pd.DataFrame, portfolio: pd.DataFrame, country_
     if len(map_data) > 0:
         # Normalize bubble sizes based on Total Insured Value
         size_scale = 50000
+        min_radius = 10000
         map_data['radius'] = (map_data['total_insured_value_eur_billion'] / map_data[
             'total_insured_value_eur_billion'].max()) * size_scale + 10000
 
