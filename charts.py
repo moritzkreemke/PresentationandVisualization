@@ -225,9 +225,12 @@ def render_q2_q3_seasonal_and_trend(filtered_data: pd.DataFrame, year_range: tup
             peak_month = month_names[int(top['month']) - 1]
             st.info(f"""
         **Seasonal Insight:**  
-        • **{top['event_type']}** peaks in **{peak_month}**  
-        • with **{int(top['count'])} recorded events historically**
+        The most pronounced seasonal pattern is **{top['event_type']}**, which reaches its highest activity in **{peak_month}**.  
+        This reflects **{int(top['count'])} recorded events** during that month in the selected region and timeframe.
+
+        Seasonality matters: different hazards peak at different times of year, so preparedness and resource planning should **adapt to the seasonal cycle** rather than stay constant.
         """)
+
 
     with col2:
         st.subheader("Q3: Are Key Perils Becoming More Frequent or Costly?")
@@ -281,9 +284,19 @@ def render_q2_q3_seasonal_and_trend(filtered_data: pd.DataFrame, year_range: tup
                 freq_icon = "↗️" if freq_change > 0 else "↘️"
                 cost_icon = "↗️" if cost_change > 0 else "↘️"
                 st.info(f"""
-            {freq_icon} **Frequency:** {abs(freq_change):.1f}% {'increase' if freq_change > 0 else 'decrease'} since {year_range[0]}  
-            {cost_icon} **Avg. Cost:** {abs(cost_change):.1f}% {'increase' if cost_change > 0 else 'decrease'} since {year_range[0]}
+            **Trend Insight ({year_range[0]}–{year_range[1]}):**
+
+            • **Event Frequency:** {abs(freq_change):.1f}% {'increase' if freq_change > 0 else 'decrease'}  
+              Climate events are becoming **more frequent**, meaning insurers face **a higher number of claim-triggering events** over time.
+
+            • **Average Economic Impact per Event:** {abs(cost_change):.1f}% {'increase' if cost_change > 0 else 'decrease'}  
+             This reflects how the **typical financial severity** of each event has changed.
+
+            **Why it matters:**  
+            For insurance and risk planning, **more frequent events** can increase **overall portfolio exposure**, even when **average per-event cost decreases**.  
+            Risk strategies should account for **both frequency trends and accumulated annual loss potential**, not just individual event severity.
             """)
+
         else:
             st.warning("No trend data available for the selected filters.")
 
