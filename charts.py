@@ -477,26 +477,40 @@ def render_q5_growth_and_insights(filtered_data: pd.DataFrame, portfolio: pd.Dat
                 deadliest = filtered_data.nlargest(5, 'Total Deaths')[
                     ['country', 'event_type', 'Start Year', 'Total Deaths', 'economic_impact_million_usd']]
                 deadliest = deadliest.rename(columns={
+                    'country': 'Country',
+                    'event_type': 'Event Type',
                     'Start Year': 'Year',
                     'Total Deaths': 'Deaths',
                     'economic_impact_million_usd': 'Impact ($M)'
                 })
-                st.dataframe(deadliest, hide_index=True, use_container_width=True)
+                # 🔴 Colora i numeri della colonna "Deaths" di rosso
+                styled_deadliest = deadliest.style.map(
+                    lambda v: 'color: red;', subset=['Deaths']
+                )
+                st.dataframe(styled_deadliest, hide_index=True, use_container_width=True)
             else:
                 st.info("No data available")
+
         with col2:
             st.subheader("Most Costly Events")
             if len(filtered_data) > 0:
                 costliest = filtered_data.nlargest(5, 'economic_impact_million_usd')[
                     ['country', 'event_type', 'Start Year', 'economic_impact_million_usd', 'Total Affected']]
                 costliest = costliest.rename(columns={
+                    'country': 'Country',
+                    'event_type': 'Event Type',
                     'Start Year': 'Year',
                     'economic_impact_million_usd': 'Impact ($M)',
                     'Total Affected': 'Affected'
                 })
-                st.dataframe(costliest, hide_index=True, use_container_width=True)
+                # 🔵 Colora i numeri della colonna "Impact ($M)" di blu
+                styled_costliest = costliest.style.map(
+                    lambda v: 'color: blue;', subset=['Impact ($M)']
+                )
+                st.dataframe(styled_costliest, hide_index=True, use_container_width=True)
             else:
                 st.info("No data available")
+
         with col3:
             st.subheader("Event Type Distribution")
             if len(filtered_data) > 0:
