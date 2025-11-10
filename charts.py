@@ -199,12 +199,12 @@ def render_q2_q3_seasonal_and_trend(filtered_data: pd.DataFrame, year_range: tup
             labels={'month': 'Month', 'count_smooth': 'Number of Events (Smoothed)', 'event_type': 'Event Type'},
             title=f"Seasonal Patterns of Climate Events - {st.session_state.selected_country}",
             color_discrete_map={
-                'Flood': '#1f78b4',
-                'Heatwave': '#e31a1c',
-                'Wildfire': '#ff7f00',
-                'Drought': '#b15928',
-                'Hurricane': '#6a3d9a',
-                'Landslide': '#33a02c'
+                'Flood': 'blue',
+                'Heatwave': 'darkorange',
+                'Wildfire': 'brown',
+                'Drought': 'yellow',
+                'Hurricane': 'darkorchid',
+                'Landslide': 'slategray'
             }
         )
 
@@ -321,16 +321,16 @@ def render_q4_peril_analyses(filtered_data: pd.DataFrame, premium_by_peril: pd.D
         peril_analysis = pd.merge(peril_data, premium_by_peril, on='event_type', how='left')
         peril_analysis['annual_premium_eur_million'] = peril_analysis['annual_premium_eur_million'].fillna(0)
         custom_color_map = {
-            "Drought": "#1B9E77",
-            "Earthquake": "#D95F02",
-            "Epidemic": "#7570B3",
-            "Flood": "#E7298A",
-            "Glacial Lake Outburst Flood": "#66A61E",
-            "Heatwave": "#E6AB02",
-            "Hurricane": "#A6761D",
-            "Landslide": "#556B2F",
-            "Volcanic": "#F781BF",
-            "Wildfire": "#FF4500"
+            "Drought": "yellow",
+            "Earthquake": "limegreen",
+            "Epidemic": "hotpink",
+            "Flood": "blue",
+            "Glacial Lake Outburst Flood": "aqua",
+            "Heatwave": "darkorange",
+            "Hurricane": "darkorchid",
+            "Landslide": "slategray",
+            "Volcanic": "red",
+            "Wildfire": "brown"
         }
 
         # --- Plot if data exists ---
@@ -363,22 +363,22 @@ def render_q4_peril_analyses(filtered_data: pd.DataFrame, premium_by_peril: pd.D
             fig_peril.add_vline(x=mean_frequency, line_dash="dash", line_color="gray", opacity=0.5)
 
             # 1.Rare but Disastrous Events
-            fig_peril.add_annotation(x=0.05, y=0.9, text="⚠️ Rare but Disastrous Events", showarrow=False,
+            fig_peril.add_annotation(x=0.05, y=0.9, text="Rare but Disastrous Events", showarrow=False,
                                      bgcolor="rgba(255, 200, 200, 0.3)",
                                      font=dict(size=10, color="darkred"))
 
             # 2. High Risk Zone
-            fig_peril.add_annotation(x=4.5, y=0.9, text="🔴 High Risk Zone", showarrow=False,
+            fig_peril.add_annotation(x=4.5, y=0.9, text="High Risk Zone", showarrow=False,
                                      bgcolor="rgba(255, 100, 100, 0.3)",
                                      font=dict(size=10, color="#8B0000"))
 
             # 3. Frequent, Low-Impact Events
-            fig_peril.add_annotation(x=4.5, y=0.15, text="⚡ Frequent, Low-Impact Events", showarrow=False,
+            fig_peril.add_annotation(x=4.5, y=0.15, text="Frequent, Low-Impact Events", showarrow=False,
                                      bgcolor="rgba(255, 255, 150, 0.3)",
                                      font=dict(size=10, color="#A6A600"))
 
             # 4.  Minor Issues
-            fig_peril.add_annotation(x=0.05, y=0.15, text="✅ Minor Issues", showarrow=False,
+            fig_peril.add_annotation(x=0.05, y=0.15, text="Minor Issues", showarrow=False,
                                      bgcolor="rgba(200, 255, 200, 0.3)",
                                      font=dict(size=10, color="darkgreen"))
 
@@ -386,7 +386,7 @@ def render_q4_peril_analyses(filtered_data: pd.DataFrame, premium_by_peril: pd.D
 
             # --- Display chart ---
             st.plotly_chart(fig_peril, use_container_width=True)
-            #st.caption("💡 **Bubble size** represents Annual Premium collected by EuroShield.")
+
 
             # --- Dynamic summary below chart ---
             most_frequent = peril_analysis.loc[peril_analysis['average_annual_frequency'].idxmax(), 'event_type']
@@ -425,7 +425,7 @@ def render_q5_growth_and_insights(filtered_data: pd.DataFrame, portfolio: pd.Dat
                 x='total_events',
                 y='severity',
                 color='market_share_percent',
-                color_continuous_scale='Blues',
+                color_continuous_scale=["#9ecae1", "#6baed6", "#4292c6", "#2171b5", "#08306b"],
                 hover_name='country',
                 hover_data={
                     'total_events': True,
@@ -461,8 +461,8 @@ def render_q5_growth_and_insights(filtered_data: pd.DataFrame, portfolio: pd.Dat
             ].nsmallest(3, 'market_share_percent')
             if len(safe_markets) > 0:
                 st.success(f"""
-                        💡 **GROWTH OPPORTUNITIES:**  
-                        Based on low risk + low market share, consider expansion in:
+                        **GROWTH OPPORTUNITIES:**  
+                        The countries where we see growth opportunities are the ones with low risk and low market share, so consider expansion in:
                         {chr(10).join([f"• **{row['country']}** ({row['market_share_percent']:.1f}% share, {int(row['total_events'])} events, severity {row['severity']:.1f})" for _, row in safe_markets.iterrows()])}
                         """)
         else:
@@ -483,7 +483,7 @@ def render_q5_growth_and_insights(filtered_data: pd.DataFrame, portfolio: pd.Dat
                     'Total Deaths': 'Deaths',
                     'economic_impact_million_usd': 'Impact ($M)'
                 })
-                # 🔴 Colora i numeri della colonna "Deaths" di rosso
+                #
                 styled_deadliest = deadliest.style.map(
                     lambda v: 'color: red;', subset=['Deaths']
                 )
@@ -503,7 +503,7 @@ def render_q5_growth_and_insights(filtered_data: pd.DataFrame, portfolio: pd.Dat
                     'economic_impact_million_usd': 'Impact ($M)',
                     'Total Affected': 'Affected'
                 })
-                # 🔵 Colora i numeri della colonna "Impact ($M)" di blu
+                #
                 styled_costliest = costliest.style.map(
                     lambda v: 'color: blue;', subset=['Impact ($M)']
                 )
@@ -516,55 +516,38 @@ def render_q5_growth_and_insights(filtered_data: pd.DataFrame, portfolio: pd.Dat
             if len(filtered_data) > 0:
                 event_dist = filtered_data['event_type'].value_counts().reset_index()
                 event_dist.columns = ['Event Type', 'Count']
-                fig_pie = px.pie(event_dist, values='Count', names='Event Type', title='', hole=0.4)
+
+                # Define your custom colors
+                custom_color_map = {
+                    "Drought": "yellow",
+                    "Earthquake": "limegreen",
+                    "Epidemic": "hotpink",
+                    "Flood": "blue",
+                    "Glacial Lake Outburst Flood": "aqua",
+                    "Heatwave": "darkorange",
+                    "Hurricane": "darkorchid",
+                    "Landslide": "slategray",
+                    "Volcanic": "red",
+                    "Wildfire": "brown"
+                }
+
+                # Create pie chart with custom colors
+                fig_pie = px.pie(
+                    event_dist,
+                    values='Count',
+                    names='Event Type',
+                    title='',
+                    hole=0.4,
+                    color='Event Type',
+                    color_discrete_map=custom_color_map
+                )
                 fig_pie.update_layout(height=300, showlegend=True, margin=dict(t=0, b=0, l=0, r=0))
                 st.plotly_chart(fig_pie, use_container_width=True)
             else:
                 st.info("No data available")
 
         st.markdown("---")
-        st.header("📋 Detailed Event Records")
-        if len(filtered_data) > 0:
-            display_cols = [
-                'country', 'event_type', 'Start Year', 'Start Month',
-                'severity', 'Total Deaths', 'Total Affected',
-                'economic_impact_million_usd', 'duration_days', 'Location'
-            ]
-            display_cols = [col for col in display_cols if col in filtered_data.columns]
-            display_data = filtered_data[display_cols].copy()
-            display_data = display_data.rename(columns={
-                'Start Year': 'Year',
-                'Start Month': 'Month',
-                'event_type': 'Event Type',
-                'country': 'Country',
-                'severity': 'Severity',
-                'Total Deaths': 'Deaths',
-                'Total Affected': 'Affected',
-                'economic_impact_million_usd': 'Impact ($M)',
-                'duration_days': 'Duration (days)'
-            })
-            if 'Severity' in display_data.columns:
-                display_data['Severity'] = display_data['Severity'].round(1)
-            if 'Impact ($M)' in display_data.columns:
-                display_data['Impact ($M)'] = display_data['Impact ($M)'].round(1)
-            if 'Deaths' in display_data.columns:
-                display_data['Deaths'] = display_data['Deaths'].fillna(0).astype(int)
-            if 'Affected' in display_data.columns:
-                display_data['Affected'] = display_data['Affected'].fillna(0).astype(int)
-            if 'Severity' in display_data.columns:
-                display_data = display_data.sort_values('Severity', ascending=False)
-            st.dataframe(display_data, hide_index=True, use_container_width=True, height=400)
-            csv = display_data.to_csv(index=False).encode('utf-8')
-            st.download_button(
-                label="📥 Download Event Data as CSV",
-                data=csv,
-                file_name=f"euroshield_events_{st.session_state.selected_country}_{year_range[0]}_{year_range[1]}.csv",
-                mime="text/csv",
-            )
-        else:
-            st.info("No events match the current filter criteria. Try adjusting your filters.")
 
-        st.markdown("---")
         st.header("📈 Summary Statistics")
         if len(filtered_data) > 0:
             col1, col2, col3, col4 = st.columns(4)
@@ -614,57 +597,4 @@ def render_q5_growth_and_insights(filtered_data: pd.DataFrame, portfolio: pd.Dat
                     st.plotly_chart(fig_corr2, use_container_width=True)
 
         st.markdown("---")
-        st.header("⚠️ Risk Alerts & Strategic Recommendations")
-        if len(filtered_data) > 0:
-            alerts = []
-            if len(filtered_data) > 10:
-                recent_years = filtered_data[filtered_data['year'] >= max(filtered_data['year']) - 2]
-                older_years = filtered_data[filtered_data['year'] < max(filtered_data['year']) - 2]
-                if len(recent_years) > 0 and len(older_years) > 0:
-                    recent_freq = len(recent_years) / max(1, recent_years['year'].nunique())
-                    older_freq = len(older_years) / max(1, older_years['year'].nunique())
-                    if recent_freq > older_freq * 1.3:
-                        alerts.append({
-                            'type': '🔴 HIGH ALERT',
-                            'message': f'Event frequency has increased by {((recent_freq / older_freq - 1) * 100):.0f}%' \
-                                       f' in recent years',
-                            'recommendation': 'Consider increasing reserves and reviewing premium structures'
-                        })
-            high_severity = filtered_data[filtered_data['severity'] > 7]
-            if len(high_severity) > 0:
-                alerts.append({
-                    'type': '⚠️ WARNING',
-                    'message': f'{len(high_severity)} high-severity events (>7/10) detected',
-                    'recommendation': 'Review coverage limits and reinsurance arrangements for affected regions'
-                })
-            # peril_coverage variable is passed for parity with original checks
-            total_impact = filtered_data['economic_impact_million_usd'].sum()
-            if peril_coverage == "Uncovered Perils" and total_impact > 1000:
-                alerts.append({
-                    'type': '💡 OPPORTUNITY',
-                    'message': f'Uncovered perils show ${total_impact:,.0f}M in economic impact',
-                    'recommendation': 'Consider developing new insurance products for these emerging risks'
-                })
-            growth_data = filtered_data.groupby('country').agg({'event_id': 'count', 'severity': 'mean'}).reset_index()
-            growth_data = pd.merge(growth_data, portfolio, on='country', how='inner')
-            if st.session_state.selected_country != "All Europe":
-                country_data = growth_data[growth_data['country'] == st.session_state.selected_country]
-                if len(country_data) > 0:
-                    ms = country_data['market_share_percent'].iloc[0]
-                    sev = country_data['severity'].iloc[0]
-                    if ms < 5 and sev < 5:
-                        alerts.append({
-                            'type': '🎯 GROWTH OPPORTUNITY',
-                            'message': f"{st.session_state.selected_country} shows low risk (severity {sev:.1f}) with low market share ({ms:.1f}%)",
-                            'recommendation': 'Prioritize market expansion efforts in this region'
-                        })
-            if alerts:
-                for alert in alerts:
-                    if alert['type'].startswith('🔴'):
-                        st.error(f"**{alert['type']}**: {alert['message']}\n\n➡️ *{alert['recommendation']}*")
-                    elif alert['type'].startswith('⚠️'):
-                        st.warning(f"**{alert['type']}**: {alert['message']}\n\n➡️ *{alert['recommendation']}*")
-                    elif alert['type'].startswith('💡') or alert['type'].startswith('🎯'):
-                        st.success(f"**{alert['type']}**: {alert['message']}\n\n➡️ *{alert['recommendation']}*")
-            else:
-                st.info("✅ No critical alerts at this time. Continue monitoring risk indicators.")
+
