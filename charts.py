@@ -548,53 +548,81 @@ def render_q5_growth_and_insights(filtered_data: pd.DataFrame, portfolio: pd.Dat
 
         st.markdown("---")
 
-        st.header("📈 Summary Statistics")
-        if len(filtered_data) > 0:
-            col1, col2, col3, col4 = st.columns(4)
-            with col1:
-                st.metric(
-                    "Average Event Duration",
-                    f"{filtered_data['duration_days'].mean():.1f} days" if 'duration_days' in filtered_data.columns else "N/A"
-                )
-            with col2:
-                st.metric("Median Severity", f"{filtered_data['severity'].median():.1f}/10")
-            insured_damage_col = "Insured Damage, Adjusted ('000 US$)"
-            with col3:
-                st.metric(
-                    "Total Insured Damage",
-                    f"${filtered_data[insured_damage_col].sum() / 1000:,.0f}M" if insured_damage_col in filtered_data.columns else "N/A"
-                )
-            with col4:
-                st.metric("Events per Year", f"{len(filtered_data) / max(1, filtered_data['year'].nunique()):.1f}")
 
-            st.subheader("Risk Correlations")
-            col1, col2 = st.columns(2)
-            with col1:
-                if len(filtered_data) > 5:
-                    fig_corr1 = px.scatter(
-                        filtered_data,
-                        x='severity',
-                        y='economic_impact_million_usd',
-                        color='event_type',
-                        title='Severity vs. Economic Impact',
-                        labels={'severity': 'Severity Score (1-10)', 'economic_impact_million_usd': 'Economic Impact ($M)'},
-                        trendline="ols"
-                    )
-                    fig_corr1.update_layout(height=350)
-                    st.plotly_chart(fig_corr1, use_container_width=True)
-            with col2:
-                if 'duration_days' in filtered_data.columns and len(filtered_data) > 5:
-                    fig_corr2 = px.scatter(
-                        filtered_data[filtered_data['duration_days'] > 0],
-                        x='duration_days',
-                        y='Total Affected',
-                        color='event_type',
-                        title='Event Duration vs. People Affected',
-                        labels={'duration_days': 'Duration (days)', 'Total Affected': 'People Affected'},
-                        trendline="ols"
-                    )
-                    fig_corr2.update_layout(height=350)
-                    st.plotly_chart(fig_corr2, use_container_width=True)
+        df_country = pd.read_csv('euroshield_portfolio_by_country.csv')
+        df_disaster = pd.read_csv('data.csv')
+
+        avg_market_share = df_country['market_share_percent'].mean()
+
+        INSURED_DAMAGE_COL = "Insured Damage, Adjusted ('000 US$)"
+        TOTAL_DAMAGE_COL = "Total Damage, Adjusted ('000 US$)"
+
+        total_insured_damage_000_usd = df_disaster[INSURED_DAMAGE_COL].fillna(0).sum()
+
+        total_economic_damage_000_usd = df_disaster[TOTAL_DAMAGE_COL].fillna(0).sum()
+
+        if total_economic_damage_000_usd > 0:
+            insurance_penetration_rate = (total_insured_damage_000_usd / total_economic_damage_000_usd) * 100
+        else:
+            insurance_penetration_rate = 0
+
+        st.header("📈 Key Economic & Portfolio Statistics")
+
+        col1, col2, col3, col4 = st.columns(4)
+
+        with col1:
+            st.metric(
+                "Avg Market Share",
+                f"{avg_market_share:.2f}%"
+            )
+
+        with col2:
+            # Insured Damage is formatted in Millions (M)
+            st.metric(
+                "Total Insured Damage",
+                f"${total_insured_damage_000_usd / 1000:,.0f}M"
+            )
+
+        with col3:
+            # Economic Damage is formatted in Billions (B) for scale
+            st.metric(
+                "Total Economic Damage",
+                f"${total_economic_damage_000_usd / 1_000_000:,.1f}B"
+            )
+
+        with col4:
+            st.metric(
+                "Insurance Penetration",
+                f"{insurance_penetration_rate:.2f}%"
+            )
+        st.subheader("Risk Correlations")
+        col1, col2 = st.columns(2)
+        with col1:
+            if len(filtered_data) > 5:
+                fig_corr1 = px.scatter(
+                    filtered_data,
+                    x='severity',
+                    y='economic_impact_million_usd',
+                    color='event_type',
+                    title='Severity vs. Economic Impact',
+                    labels={'severity': 'Severity Score (1-10)', 'economic_impact_million_usd': 'Economic Impact ($M)'},
+                    trendline="ols"
+                )
+                fig_corr1.update_layout(height=350)
+                st.plotly_chart(fig_corr1, use_container_width=True)
+        with col2:
+            if 'duration_days' in filtered_data.columns and len(filtered_data) > 5:
+                fig_corr2 = px.scatter(
+                    filtered_data[filtered_data['duration_days'] > 0],
+                    x='duration_days',
+                    y='Total Affected',
+                    color='event_type',
+                    title='Event Duration vs. People Affected',
+                    labels={'duration_days': 'Duration (days)', 'Total Affected': 'People Affected'},
+                    trendline="ols"
+                )
+                fig_corr2.update_layout(height=350)
+                st.plotly_chart(fig_corr2, use_container_width=True)
 
         st.markdown("---")
 
