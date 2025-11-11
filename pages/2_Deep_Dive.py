@@ -13,20 +13,21 @@ except ImportError:
     plotly_events = None
 
 
-def render_country_deep_dive(data: pd.DataFrame, portfolio: pd.DataFrame, premium_by_peril: pd.DataFrame, selected_country: str):
+def render_country_deep_dive(data: pd.DataFrame, portfolio: pd.DataFrame, premium_by_peril: pd.DataFrame,
+                             selected_country: str):
     """Render the country deep dive page with detailed analysis."""
-    
+
     # ====================
     # IMPROVED HEADER SECTION
     # ====================
-    
+
     # Back button with improved styling
     col_back, col_header = st.columns([1, 11])
     with col_back:
         if st.button("← Back", type="secondary", use_container_width=True):
             st.session_state.selected_country = "All Europe"
             st.switch_page("pages/1_Overview.py")
-    
+
     with col_header:
         st.markdown(f"""
             <div style='padding: 0.5rem 0; margin-bottom: 0.5rem; border-bottom: 1px solid #e0e0e0;'>
@@ -49,7 +50,7 @@ def render_country_deep_dive(data: pd.DataFrame, portfolio: pd.DataFrame, premiu
     # ====================
     # CALCULATE ALL METRICS FIRST
     # ====================
-    
+
     # Peril metrics
     peril_freq = df_country['event_type'].value_counts()
     most_frequent = peril_freq.index[0] if len(peril_freq) > 0 else "N/A"
@@ -70,7 +71,7 @@ def render_country_deep_dive(data: pd.DataFrame, portfolio: pd.DataFrame, premiu
         recent_decade = decade_counts.iloc[-1]
         previous_decade = decade_counts.iloc[-2]
         trend_pct = ((recent_decade - previous_decade) / previous_decade * 100) if previous_decade > 0 else 0
-        trend_direction = "↗️" if trend_pct > 0 else "↘️" if trend_pct < 0 else "→"
+        trend_direction = "↗" if trend_pct > 0 else "↘" if trend_pct < 0 else "→"
     else:
         trend_pct = 0
         trend_direction = "→"
@@ -81,17 +82,14 @@ def render_country_deep_dive(data: pd.DataFrame, portfolio: pd.DataFrame, premiu
     # ====================
     # NEW LAYOUT: HEATMAP LEFT, METRICS RIGHT
     # ====================
-    
-    
-    
-    
+
     # Create two columns: 60% for heatmap, 40% for metrics
     col_heatmap, col_metrics = st.columns([4, 1])
-    
+
     # LEFT COLUMN: SEASONAL HEATMAP
     with col_heatmap:
         st.markdown("####  Seasonal Event Count")
-        
+
         # Create heatmap data
         perils_for_heatmap = df_country['event_type'].value_counts().head(5).index.tolist()
         heatmap_data = []
@@ -122,7 +120,6 @@ def render_country_deep_dive(data: pd.DataFrame, portfolio: pd.DataFrame, premiu
 
         st.plotly_chart(fig_heatmap, use_container_width=True)
 
-
         col1, col2 = st.columns(2)
 
         with col1:
@@ -144,11 +141,12 @@ def render_country_deep_dive(data: pd.DataFrame, portfolio: pd.DataFrame, premiu
             if total > 0:
                 affected_pct = (total_affected / total * 100)
                 if affected_pct > 60:
-                    st.caption("⚠️ High 'Affected' percentage suggests significant health insurance exposure")
+                    st.caption("⚠ High 'Affected' percentage suggests significant health insurance exposure")
 
         with col2:
             st.markdown("#### Damage Distribution by Peril")
-            damage_by_peril = df_country.groupby('event_type')['economic_impact_million_usd'].sum().sort_values(ascending=False)
+            damage_by_peril = df_country.groupby('event_type')['economic_impact_million_usd'].sum().sort_values(
+                ascending=False)
 
             fig_bar = go.Figure(data=[go.Bar(
                 x=damage_by_peril.values / 1000,
@@ -166,10 +164,11 @@ def render_country_deep_dive(data: pd.DataFrame, portfolio: pd.DataFrame, premiu
 
             if len(damage_by_peril) > 0:
                 top_peril = damage_by_peril.index[0]
-                st.caption(f"💼 {top_peril} damage dominance indicates homeowners insurance should focus on {top_peril.lower()} coverage")
+                st.caption(
+                    f"💼 {top_peril} damage dominance indicates homeowners insurance should focus on {top_peril.lower()} coverage")
 
         st.markdown("---")
-    
+
     # RIGHT COLUMN: KEY METRICS
     with col_metrics:
         st.markdown("")  # Empty - metrics start immediately
@@ -220,7 +219,7 @@ def render_country_deep_dive(data: pd.DataFrame, portfolio: pd.DataFrame, premiu
             <div style='{card_style}'>
                 <div style='{label_style}'>Highest Severity</div>
                 <div style='{value_style}'>{most_severe}</div>
-                <div style='{subtext_style}'>⚠️ Average: {severity_avg:.1f}/10</div>
+                <div style='{subtext_style}'>⚠ Average: {severity_avg:.1f}/10</div>
             </div>
         """, unsafe_allow_html=True)
 
@@ -243,10 +242,6 @@ def render_country_deep_dive(data: pd.DataFrame, portfolio: pd.DataFrame, premiu
             </div>
         """, unsafe_allow_html=True)
 
-
-    
-
-    
 
 # Set page configuration
 st.set_page_config(layout="wide", page_title="Country Deep Dive - EuroShield")
@@ -290,7 +285,7 @@ render_country_deep_dive(data, portfolio, premium_by_peril, st.session_state.sel
 
 # Footer
 st.caption("""
-    📊 **EuroShield Insurance Group** | Climate Risk Analytics Division  
+    📊 *EuroShield Insurance Group* | Climate Risk Analytics Division  
     Data Source: EM-DAT (Emergency Events Database) - CRED / UCLouvain, Brussels, Belgium  
     Dashboard covers historical disaster events across European markets
     """)

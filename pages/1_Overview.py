@@ -104,7 +104,7 @@ def render_q1_map(filtered_data: pd.DataFrame, portfolio: pd.DataFrame, country_
                     tooltip=tooltip_html
                 ).add_to(m)
 
-            map_output = st_folium(m, width='100%', height=500)
+            map_output = st_folium(m, width='100%', height=300)
 
         with col2:
             # --- Legend for BUBBLE SIZE: Total Insured Value ---
@@ -130,7 +130,7 @@ def render_q1_map(filtered_data: pd.DataFrame, portfolio: pd.DataFrame, country_
                             max_radius_meters - min_radius_meters)
 
                 # Scale for display in Streamlit
-                display_size_svg = max(5, int(display_radius / 3000))
+                display_size_svg = max(5, int(display_radius / 7000))
 
                 st.markdown(f"""
                     <div style="display: flex; align-items: center; margin-bottom: 5px;">
@@ -233,13 +233,7 @@ def render_q2_q3_seasonal_and_trend(filtered_data: pd.DataFrame, year_range: tup
         if len(monthly_counts) > 0:
             top = monthly_counts.sort_values('count', ascending=False).iloc[0]
             peak_month = month_names[int(top['month']) - 1]
-            st.info(f"""
-        **Seasonal Insight:**  
-        The most pronounced seasonal pattern is **{top['event_type']}**, which reaches its highest activity in **{peak_month}**.  
-        This reflects **{int(top['count'])} recorded events** during that month in the selected region and timeframe.
 
-        Seasonality matters: different hazards peak at different times of year, so preparedness and resource planning should **adapt to the seasonal cycle** rather than stay constant.
-        """)
 
     with col2:
         st.subheader("Q3: Are Key Perils Becoming More Frequent or Costly?")
@@ -290,19 +284,7 @@ def render_q2_q3_seasonal_and_trend(filtered_data: pd.DataFrame, year_range: tup
                                 0]) / (yearly_trends['avg_economic_impact'].iloc[0] + 1) * 100)
                 freq_icon = "↗️" if freq_change > 0 else "↘️"
                 cost_icon = "↗️" if cost_change > 0 else "↘️"
-                st.info(f"""
-            **Trend Insight ({year_range[0]}–{year_range[1]}):**
 
-            • **Event Frequency:** {abs(freq_change):.1f}% {'increase' if freq_change > 0 else 'decrease'}  
-              Climate events are becoming **{'more' if freq_change > 0 else 'less'} frequent**, meaning insurers face **a {'higher' if freq_change > 0 else 'lower'} number of claim-triggering events** over time.
-
-            • **Average Economic Impact per Event:** {abs(cost_change):.1f}% {'increase' if cost_change > 0 else 'decrease'}  
-             This reflects how the **typical financial severity** of each event has changed.
-
-            **Why it matters:**  
-            For insurance and risk planning, **more frequent events** can increase **overall portfolio exposure**, even when **average per-event cost decreases**.  
-            Risk strategies should account for **both frequency trends and accumulated annual loss potential**, not just individual event severity.
-            """)
         else:
             st.warning("No trend data available for the selected filters.")
 
@@ -387,15 +369,7 @@ def render_q4_peril_analyses(filtered_data: pd.DataFrame, premium_by_peril: pd.D
         most_frequent = peril_analysis.loc[peril_analysis['average_annual_frequency'].idxmax(), 'event_type']
         most_risky = peril_analysis.loc[peril_analysis['severity'].idxmax(), 'event_type']
 
-        st.info(
-            "This chart compares how often each disaster occurs (x-axis) and its average impact (y-axis).  \n"
-            "Bubble size reflects the insurance premium collected, showing financial exposure.  \n"
-            "Perils in the upper-right are both frequent and severe, representing the highest overall risk.  \n\n"
-            "---  \n"
-            "**Summary:**  \n"
-            f"- **Most frequent event:** {most_frequent}  \n"
-            f"- **Highest severity event:** {most_risky}"
-        )
+
     else:
         st.warning("No peril data available for the selected filters.")
 
@@ -455,12 +429,6 @@ def render_q5_growth_and_insights(filtered_data: pd.DataFrame, portfolio: pd.Dat
             (growth_data['market_share_percent'] < 5)
             ].nsmallest(3, 'market_share_percent')
 
-        if len(safe_markets) > 0:
-            st.success(f"""
-                **GROWTH OPPORTUNITIES:**  
-                The countries where we see growth opportunities are the ones with low risk and low market share, so consider expansion in:
-                {chr(10).join([f"• **{row['country']}** ({row['market_share_percent']:.1f}% share, {int(row['total_events'])} events, severity {row['severity']:.1f})" for _, row in safe_markets.iterrows()])}
-            """)
     else:
         st.warning("No growth opportunity data available for the selected filters.")
 
@@ -543,7 +511,7 @@ def render_q5_growth_and_insights(filtered_data: pd.DataFrame, portfolio: pd.Dat
     st.markdown("---")
 
     # Key Economic & Portfolio Statistics
-    st.header("📈 Key Economic & Portfolio Statistics")
+    st.header("Key Economic & Portfolio Statistics")
 
     INSURED_DAMAGE_COL = "Insured Damage, Adjusted ('000 US$)"
     TOTAL_DAMAGE_COL = "Total Damage, Adjusted ('000 US$)"
@@ -632,33 +600,35 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Load data via helper module
-data, portfolio, premium_by_peril, merged_data = load_data()
-
-# Initialize session state for filters
-if 'selected_country' not in st.session_state:
-    st.session_state.selected_country = "All Europe"
-if 'selected_peril' not in st.session_state:
-    st.session_state.selected_peril = "All Perils"
-if 'selected_month' not in st.session_state:
-    st.session_state.selected_month = None
-
 # Header
-st.markdown('<div class="main-header">📊 Portfolio Overview</div>', unsafe_allow_html=True)
+st.markdown('<div class="main-header">EUROSHIELD CLIMATE RISK DASHBOARD</div>', unsafe_allow_html=True)
 st.markdown(
     f'<div class="sub-header">Last Updated: {datetime.now().strftime("%B %Y")} | Data Source: EM-DAT International Disaster Database</div>',
     unsafe_allow_html=True)
 
-# Get available years from data
-available_years = sorted(data['year'].dropna().unique())
-min_year = int(available_years[0]) if len(available_years) > 0 else 1950
-max_year = int(available_years[-1]) if len(available_years) > 0 else 2025
+# ============================================================================
+# Q1: WHERE ARE OUR GREATEST FINANCIAL RISKS FROM CLIMATE EVENTS?
+# ============================================================================
 
-# Top filter bar (NO COUNTRY FILTER)
-col_f1, col_f2, col_f3 = st.columns([2, 2, 1])
+col_map, col_filters = st.columns([3, 1])
 
-with col_f1:
-    # Define covered and uncovered perils
+with col_filters:
+    data, portfolio, premium_by_peril, merged_data = load_data()
+
+    # Initialize session state for filters
+    if 'selected_country' not in st.session_state:
+        st.session_state.selected_country = "All Europe"
+    if 'selected_peril' not in st.session_state:
+        st.session_state.selected_peril = "All Perils"
+    if 'selected_month' not in st.session_state:
+        st.session_state.selected_month = None
+
+    # Get available years from data
+    available_years = sorted(data['year'].dropna().unique())
+    min_year = int(available_years[0]) if len(available_years) > 0 else 1950
+    max_year = int(available_years[-1]) if len(available_years) > 0 else 2025
+
+    st.subheader("Filter Events")
     covered_perils = ['Flood', 'Wildfire', 'Hurricane', 'Heatwave', 'Coldwave', 'Storm']
     uncovered_perils = ['Earthquake', 'Drought', 'Landslide', 'Volcanic']
 
@@ -667,50 +637,65 @@ with col_f1:
         ["All Perils", "Covered Perils", "Uncovered Perils"],
         key="peril_coverage"
     )
-
-with col_f2:
+    european_countries = ["All Europe"] + sorted(portfolio['country'].tolist())
+    country_filter = st.selectbox(
+        "Country",
+        european_countries,
+        index=european_countries.index(
+            st.session_state.selected_country) if st.session_state.selected_country in european_countries else 0
+    )
+    st.session_state.selected_country = country_filter
     year_range = st.select_slider(
         "Year Range",
         options=list(range(min_year, max_year + 1)),
         value=(min_year, max_year)
     )
-
-with col_f3:
-    if st.button("🔄 Reset All", width='stretch'):
+    if st.button("🔄 Reset All", use_container_width=True):
         st.session_state.selected_country = "All Europe"
         st.session_state.selected_peril = "All Perils"
         st.session_state.selected_month = None
         st.rerun()
 
-# Breadcrumb trail
-breadcrumbs = []
-if st.session_state.selected_peril != "All Perils":
-    breadcrumbs.append(st.session_state.selected_peril)
-if st.session_state.selected_month:
-    breadcrumbs.append(f"Month {st.session_state.selected_month}")
+    # Breadcrumb trail
+    breadcrumbs = []
+    if st.session_state.selected_country != "All Europe":
+        breadcrumbs.append(st.session_state.selected_country)
+    if st.session_state.selected_peril != "All Perils":
+        breadcrumbs.append(st.session_state.selected_peril)
+    if st.session_state.selected_month:
+        breadcrumbs.append(f"Month {st.session_state.selected_month}")
 
-if breadcrumbs:
-    st.info(f"**Active Filters:** {' > '.join(breadcrumbs)}")
+    if breadcrumbs:
+        st.info(f"**Active Filters:** {' > '.join(breadcrumbs)}")
 
-# Apply filters to data
-filtered_data = merged_data.copy()
+    # Apply filters to data
+    filtered_data = merged_data.copy()
 
-# Filter by year range
-filtered_data = filtered_data[(filtered_data['year'] >= year_range[0]) & (filtered_data['year'] <= year_range[1])]
+    # Filter by year range
+    filtered_data = filtered_data[(filtered_data['year'] >= year_range[0]) & (filtered_data['year'] <= year_range[1])]
 
-# Filter by peril coverage
-if peril_coverage == "Covered Perils":
-    filtered_data = filtered_data[filtered_data['event_type'].isin(covered_perils)]
-elif peril_coverage == "Uncovered Perils":
-    filtered_data = filtered_data[filtered_data['event_type'].isin(uncovered_perils)]
+    # Filter by country
+    if st.session_state.selected_country != "All Europe":
+        filtered_data = filtered_data[filtered_data['country'] == st.session_state.selected_country]
 
-# Filter by specific peril
-if st.session_state.selected_peril != "All Perils":
-    filtered_data = filtered_data[filtered_data['event_type'] == st.session_state.selected_peril]
+    # Filter by peril coverage
+    if peril_coverage == "Covered Perils":
+        filtered_data = filtered_data[filtered_data['event_type'].isin(covered_perils)]
+    elif peril_coverage == "Uncovered Perils":
+        filtered_data = filtered_data[filtered_data['event_type'].isin(uncovered_perils)]
 
-# Filter by month
-if st.session_state.selected_month:
-    filtered_data = filtered_data[filtered_data['month'] == st.session_state.selected_month]
+    # Filter by specific peril
+    if st.session_state.selected_peril != "All Perils":
+        filtered_data = filtered_data[filtered_data['event_type'] == st.session_state.selected_peril]
+
+    # Filter by month
+    if st.session_state.selected_month:
+        filtered_data = filtered_data[filtered_data['month'] == st.session_state.selected_month]
+
+with col_map:
+    st.header("Question 1: Regional Risk Landscape and Portfolio Exposure")
+    render_q1_map(filtered_data, portfolio, country_centroids)
+st.markdown("---")
 
 # Calculate KPIs
 total_events = len(filtered_data)
@@ -726,35 +711,55 @@ annual_premium = portfolio['annual_premium_eur_million'].sum()
 market_share = portfolio['market_share_percent'].mean()
 
 # Display KPIs
-st.markdown("---")
+st.markdown("""
+    <style>
+    /* --------------------------------- */
+    /* Custom Styling for KPI Boxes */
+    /* --------------------------------- */
+    .metric-box {
+        padding: 10px;
+        border: 1px solid #e6e6e6; /* Light gray border */
+        border-radius: 5px;
+        margin-bottom: 10px;
+        height: 100%;
+        box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.05); /* Subtle shadow */
+    }
+
+    /* --------------------------------- */
+    /* Custom Font Sizing for Labels and Values */
+    /* --------------------------------- */
+    /* Selector for metric values (often changes with Streamlit versions) */
+    .st-emotion-cache-1dl921r, .st-emotion-cache-1s3t14s, .st-emotion-cache-183n41b {
+        font-size: 1.4rem !important; /* Smaller Value Font */
+    }
+    /* Selector for metric labels */
+    .st-emotion-cache-12fmwz8, .st-emotion-cache-10q7q0c {
+        font-size: 0.8rem !important; /* Smaller Label Font */
+    }
+    </style>
+""", unsafe_allow_html=True)
+
 kpi_col1, kpi_col2, kpi_col3, kpi_col4, kpi_col5, kpi_col6 = st.columns(6)
 
-with kpi_col1:
-    st.metric("Total Events", f"{total_events:,}")
 
-with kpi_col2:
-    st.metric("Avg. Severity", f"{avg_severity:.1f}/10")
+def custom_metric(col, label, value, unit=""):
+    with col:
+        # Construct the entire HTML structure (box, label, value) as one string
+        html_content = f"""
+                    <div class="metric-box">
+                        <p style='font-size: 0.75rem; color: gray; margin-bottom: 0px;'>{label}</p>
+                        <p style='font-size: 1.4rem; font-weight: bold; color: #1f4788; margin-top: 5px;'>{value}{unit}</p>
+                    </div>
+                """
+        st.markdown(html_content, unsafe_allow_html=True)
 
-with kpi_col3:
-    st.metric("Economic Impact", f"${total_impact:,.0f}M")
 
-with kpi_col4:
-    st.metric("Total Deaths", f"{int(total_deaths):,}")
-
-with kpi_col5:
-    st.metric("People Affected", f"{int(total_affected):,}")
-
-with kpi_col6:
-    st.metric("EuroShield TIV", f"€{total_tiv:.1f}B")
-
-st.markdown("---")
-
-# ============================================================================
-# Q1: WHERE ARE OUR GREATEST FINANCIAL RISKS FROM CLIMATE EVENTS?
-# ============================================================================
-st.header("Q1: Where Are Our Greatest Financial Risks from Climate Events?")
-
-render_q1_map(filtered_data, portfolio, country_centroids)
+custom_metric(kpi_col1, "Total Events", f"{total_events:,}")
+custom_metric(kpi_col2, "Avg. Severity", f"{avg_severity:.1f}/10")
+custom_metric(kpi_col3, "Economic Impact", f"${total_impact:,.0f}M")
+custom_metric(kpi_col4, "Total Deaths", f"{int(total_deaths):,}")
+custom_metric(kpi_col5, "People Affected", f"{int(total_affected):,}")
+custom_metric(kpi_col6, "EuroShield TIV", f"€{total_tiv:.1f}B")
 
 st.markdown("---")
 
