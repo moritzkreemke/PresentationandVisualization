@@ -24,9 +24,9 @@ def render_country_deep_dive(data: pd.DataFrame, portfolio: pd.DataFrame, premiu
     # Back button with improved styling
     col_back, col_header = st.columns([1, 11])
     with col_back:
-        if st.button("← Back", type="secondary", use_container_width=True):
+        if st.button("← Back", type="secondary", width='stretch'):
             st.session_state.selected_country = "All Europe"
-            st.switch_page("pages/1_Overview.py")
+            st.switch_page("0_Overview.py")
 
     with col_header:
         st.markdown(f"""
@@ -118,7 +118,7 @@ def render_country_deep_dive(data: pd.DataFrame, portfolio: pd.DataFrame, premiu
             font=dict(size=12)
         )
 
-        st.plotly_chart(fig_heatmap, use_container_width=True)
+        st.plotly_chart(fig_heatmap, width='stretch')
 
         col1, col2 = st.columns(2)
 
@@ -135,7 +135,7 @@ def render_country_deep_dive(data: pd.DataFrame, portfolio: pd.DataFrame, premiu
                 marker_colors=['#d62728', '#ff9896', '#ffbb78']
             )])
             fig_pie.update_layout(height=300, margin=dict(l=0, r=0, t=20, b=0))
-            st.plotly_chart(fig_pie, use_container_width=True)
+            st.plotly_chart(fig_pie, width='stretch')
 
             total = total_deaths + total_injured + total_affected
             if total > 0:
@@ -160,7 +160,7 @@ def render_country_deep_dive(data: pd.DataFrame, portfolio: pd.DataFrame, premiu
                 yaxis_title="",
                 margin=dict(l=0, r=0, t=20, b=0)
             )
-            st.plotly_chart(fig_bar, use_container_width=True)
+            st.plotly_chart(fig_bar, width='stretch')
 
             if len(damage_by_peril) > 0:
                 top_peril = damage_by_peril.index[0]
