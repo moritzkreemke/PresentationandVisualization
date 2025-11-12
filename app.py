@@ -12,6 +12,7 @@ import pydeck as pdk
 
 st.set_page_config(page_title="EuroShield Climate Dashboard", layout="wide")
 
+
 def render_q1_map(filtered_data: pd.DataFrame, portfolio: pd.DataFrame, country_centroids: dict):
     """Render Folium map con legenda e metriche a destra, tutte affiancate"""
 
@@ -50,7 +51,8 @@ def render_q1_map(filtered_data: pd.DataFrame, portfolio: pd.DataFrame, country_
                 map_data['radius_meters'] = (min_radius_meters + max_radius_meters) / 2
             else:
                 map_data['radius_meters'] = map_data['total_insured_value_eur_billion'].apply(
-                    lambda tiv: min_radius_meters + ((tiv - min_tiv) / (max_tiv - min_tiv)) * (max_radius_meters - min_radius_meters)
+                    lambda tiv: min_radius_meters + ((tiv - min_tiv) / (max_tiv - min_tiv)) * (
+                                max_radius_meters - min_radius_meters)
                 )
 
             sev = map_data['average_severity']
@@ -95,23 +97,30 @@ def render_q1_map(filtered_data: pd.DataFrame, portfolio: pd.DataFrame, country_
                     tooltip=tooltip_html
                 ).add_to(m)
 
-            st_folium(m, width='100%', height=300)  # mappa più stretta
 
-        # --- Legenda ---
+            #
+            st_folium(m, width='100%', height=350)
+
+
+        # --- Legend ---
         with col_legend:
             st.markdown("**Bubble size**", unsafe_allow_html=True)
             legend_values = [max_val := map_data['total_insured_value_eur_billion'].max(),
-                             max_val/2,
-                             min_val := map_data['total_insured_value_eur_billion'].min() if map_data['total_insured_value_eur_billion'].min()>0 else 0.1]
+                             max_val / 2,
+                             min_val := map_data[
+                                                                                                 'total_insured_value_eur_billion'].min() if map_data[
+                                                                                                                                              'total_insured_value_eur_billion'].min() > 0 else 0.1]
             legend_values.sort(reverse=True)
 
             for val in legend_values:
-                display_radius = min_radius_meters + ((val - min_tiv) / (max_tiv - min_tiv)) * (max_radius_meters - min_radius_meters) if max_tiv != min_tiv else (min_radius_meters + max_radius_meters)/2
+                display_radius = min_radius_meters + ((val - min_tiv) / (max_tiv - min_tiv)) * (
+                            max_radius_meters - min_radius_meters) if max_tiv != min_tiv else (
+                                                                                                          min_radius_meters + max_radius_meters) / 2
                 display_size_svg = max(5, int(display_radius / 7000))
                 st.markdown(f"""
                     <div style="display:flex; align-items:center; margin-bottom:3px;">
                         <svg height="{display_size_svg}" width="{display_size_svg}">
-                            <circle cx="{display_size_svg/2}" cy="{display_size_svg/2}" r="{display_size_svg/2}" fill="#808080" />
+                            <circle cx="{display_size_svg / 2}" cy="{display_size_svg / 2}" r="{display_size_svg / 2}" fill="#808080" />
                         </svg>
                         <span style="margin-left:5px;">€{val:.1f}B</span>
                     </div>
@@ -126,7 +135,7 @@ def render_q1_map(filtered_data: pd.DataFrame, portfolio: pd.DataFrame, country_
                 </div>
             """, unsafe_allow_html=True)
 
-        # --- Metriche ---
+        # --- Metrics ---
         with col_metrics:
             def compact_metric(label, value, unit=""):
                 st.markdown(f"""
@@ -159,6 +168,7 @@ def render_q1_map(filtered_data: pd.DataFrame, portfolio: pd.DataFrame, country_
         st.warning("No data available for the selected filters.")
         return None
 
+
 # --- Custom color map ---
 CUSTOM_COLOR_MAP = {
     "Drought": "yellow",
@@ -173,9 +183,6 @@ CUSTOM_COLOR_MAP = {
     "Wildfire": "brown",
     "Storm": "teal"
 }
-
-
-
 
 
 def render_q2_q3_seasonal_and_trend(filtered_data: pd.DataFrame, year_range: tuple):
@@ -228,7 +235,7 @@ def render_q2_q3_seasonal_and_trend(filtered_data: pd.DataFrame, year_range: tup
             )
         )
 
-        st.plotly_chart(fig_season, width='stretch')
+        st.plotly_chart(fig_season, use_container_width=True)
 
         if len(monthly_counts) > 0:
             top = monthly_counts.sort_values('count', ascending=False).iloc[0]
@@ -262,10 +269,9 @@ def render_q2_q3_seasonal_and_trend(filtered_data: pd.DataFrame, year_range: tup
                 color_discrete_map=custom_color_map
             )
             fig_pie.update_layout(height=200, showlegend=True, margin=dict(t=0, b=0, l=0, r=0))
-            st.plotly_chart(fig_pie, width='stretch')
+            st.plotly_chart(fig_pie, use_container_width=True)
         else:
             st.info("No data available")
-
 
     with col2:
         st.subheader("Are Key Perils Becoming More Frequent or Costly?")
@@ -306,14 +312,14 @@ def render_q2_q3_seasonal_and_trend(filtered_data: pd.DataFrame, year_range: tup
                 hovermode='x unified',
                 height=400
             )
-            st.plotly_chart(fig_trend, width='stretch')
+            st.plotly_chart(fig_trend, use_container_width=True)  # Modificato in use_container_width
 
             if len(yearly_trends) > 1:
                 freq_change = ((yearly_trends['event_count'].iloc[-1] - yearly_trends['event_count'].iloc[0]) / (
                         yearly_trends['event_count'].iloc[0] + 1) * 100)
                 cost_change = (
-                            (yearly_trends['avg_economic_impact'].iloc[-1] - yearly_trends['avg_economic_impact'].iloc[
-                                0]) / (yearly_trends['avg_economic_impact'].iloc[0] + 1) * 100)
+                        (yearly_trends['avg_economic_impact'].iloc[-1] - yearly_trends['avg_economic_impact'].iloc[
+                            0]) / (yearly_trends['avg_economic_impact'].iloc[0] + 1) * 100)
                 freq_icon = "↗️" if freq_change > 0 else "↘️"
                 cost_icon = "↗️" if cost_change > 0 else "↘️"
 
@@ -396,7 +402,7 @@ def render_q4_peril_analyses(filtered_data: pd.DataFrame, premium_by_peril: pd.D
 
         fig_peril.update_layout(height=450, showlegend=True)
 
-        st.plotly_chart(fig_peril, width='stretch')
+        st.plotly_chart(fig_peril, use_container_width=True)  # Modificato in use_container_width
 
         most_frequent = peril_analysis.loc[peril_analysis['average_annual_frequency'].idxmax(), 'event_type']
         most_risky = peril_analysis.loc[peril_analysis['severity'].idxmax(), 'event_type']
@@ -453,7 +459,7 @@ def render_q5_growth_and_insights(filtered_data: pd.DataFrame, portfolio: pd.Dat
             font=dict(size=12, color="darkgreen")
         )
         fig_growth.update_layout(height=450)
-        st.plotly_chart(fig_growth, width='stretch')
+        st.plotly_chart(fig_growth, use_container_width=True)  # Modificato in use_container_width
 
         safe_markets = growth_data[
             (growth_data['total_events'] < mean_events) &
@@ -466,8 +472,7 @@ def render_q5_growth_and_insights(filtered_data: pd.DataFrame, portfolio: pd.Dat
 
 
 def additional_insights_render(iltered_data: pd.DataFrame, portfolio: pd.DataFrame, year_range: tuple,
-                                  peril_coverage: str):
-
+                               peril_coverage: str):
     # Key Economic & Portfolio Statistics
     st.header("Key Economic & Portfolio Statistics")
 
@@ -514,7 +519,7 @@ def additional_insights_render(iltered_data: pd.DataFrame, portfolio: pd.DataFra
                 trendline="ols"
             )
             fig_corr1.update_layout(height=350)
-            st.plotly_chart(fig_corr1, width='stretch')
+            st.plotly_chart(fig_corr1, use_container_width=True)
 
     with col2:
         if 'duration_days' in filtered_data.columns and len(filtered_data) > 5:
@@ -528,7 +533,7 @@ def additional_insights_render(iltered_data: pd.DataFrame, portfolio: pd.DataFra
                 trendline="ols"
             )
             fig_corr2.update_layout(height=350)
-            st.plotly_chart(fig_corr2, width='stretch')
+            st.plotly_chart(fig_corr2, use_container_width=True)  # Modificato in use_container_width
 
 
 # Set page configuration
@@ -553,6 +558,10 @@ st.markdown("""
         padding: 1rem;
         border-radius: 0.5rem;
         border-left: 4px solid #1f4788;
+    }
+    /* Rimuove lo spazio extra introdotto dalle schede di default */
+    [data-testid="stTabs"] {
+        margin-top: -20px;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -620,7 +629,8 @@ if st.session_state.selected_month:
     breadcrumbs.append(f"Month {st.session_state.selected_month}")
 
 if breadcrumbs:
-    st.markdown(f"<p style='font-size:0.8rem; color:gray;'>Active Filters: {' > '.join(breadcrumbs)}</p>", unsafe_allow_html=True)
+    st.markdown(f"<p style='font-size:0.8rem; color:gray;'>Active Filters: {' > '.join(breadcrumbs)}</p>",
+                unsafe_allow_html=True)
 
 # ============================================================================
 # APPLY FILTERS
@@ -631,7 +641,7 @@ filtered_data = merged_data.copy()
 filtered_data = filtered_data[
     (filtered_data['year'] >= year_range[0]) &
     (filtered_data['year'] <= year_range[1])
-]
+    ]
 
 # Peril coverage filter
 if peril_coverage == "Covered Perils":
@@ -650,37 +660,47 @@ if st.session_state.selected_month:
 # ============================================================================
 # MAP
 # ============================================================================
-st.markdown("<h4 style='margin-top:0.8rem;'>Regional Risk Landscape and Portfolio Exposure</h4>", unsafe_allow_html=True)
+st.markdown("<h4 style='margin-top:0.8rem;'>Regional Risk Landscape and Portfolio Exposure</h4>",
+            unsafe_allow_html=True)
 render_q1_map(filtered_data, portfolio, country_centroids)
-#st.markdown("---")
 
+# ============================================================================
+# --- MODIFICA: Inizio della struttura a schede ---
+# ============================================================================
 
+st.markdown("<div style='margin-top: -20px;'></div>", unsafe_allow_html=True)  # Rimuove spazio extra
 
-
-
+tab1, tab2, tab3 = st.tabs([
+    "Seasonal & Trend Analysis",
+    "Strategic Analysis",
+    "Additional Insights"
+])
 
 # ============================================================================
 # Q2 & Q3: SEASONAL PATTERNS AND TRENDS
 # ============================================================================
-render_q2_q3_seasonal_and_trend(filtered_data, year_range)
-
-st.markdown("---")
+with tab1:
+    render_q2_q3_seasonal_and_trend(filtered_data, year_range)
 
 # ============================================================================
 # Q4 & Q% : STRATEGIC ANALYSIS, GROWTH AND INSIGHTS
 # ============================================================================
+with tab2:
+    Q4, Q5 = st.columns(2)
+    with Q4:
+        render_q4_peril_analyses(filtered_data, premium_by_peril)
+    with Q5:
+        render_q5_growth_and_insights(filtered_data, portfolio, year_range, peril_coverage)
 
-Q4, Q5 = st.columns(2)
+# ============================================================================
+# ADDITIONAL INSIGHTS
+# ============================================================================
+with tab3:
+    additional_insights_render(filtered_data, portfolio, year_range, peril_coverage)
 
-with Q4:
-    render_q4_peril_analyses(filtered_data, premium_by_peril)
+# ============================================================================
 
-with Q5:
-    render_q5_growth_and_insights(filtered_data, portfolio, year_range, peril_coverage)
 
-st.markdown("---")
-
-additional_insights_render(filtered_data, portfolio, year_range, peril_coverage)
 
 # Footer
 st.caption("""
