@@ -167,7 +167,7 @@ def render_q2_q3_seasonal_and_trend(filtered_data: pd.DataFrame, year_range: tup
     col1, col2 = st.columns(2)
 
     with col1:
-        st.subheader("Q2: When Should We Prepare for Seasonal Surges?")
+        st.subheader("When Should We Prepare for Seasonal Surges?")
 
         # Keep only climate-relevant perils
         key_events = ['Flood', 'Heatwave', 'Wildfire', 'Drought', 'Hurricane']
@@ -233,7 +233,7 @@ def render_q2_q3_seasonal_and_trend(filtered_data: pd.DataFrame, year_range: tup
 
 
     with col2:
-        st.subheader("Q3: Are Key Perils Becoming More Frequent or Costly?")
+        st.subheader("Are Key Perils Becoming More Frequent or Costly?")
 
         # Group by year
         yearly_trends = filtered_data.groupby('year').agg({
@@ -304,7 +304,7 @@ def render_q2_q3_seasonal_and_trend(filtered_data: pd.DataFrame, year_range: tup
 def render_q4_peril_analyses(filtered_data: pd.DataFrame, premium_by_peril: pd.DataFrame):
     col1, col2 = st.columns(2)
     with col1:
-        st.subheader("Q4: Disaster Risk Profile: Frequency vs. Impact")
+        st.subheader("Disaster Risk Profile: Frequency vs. Impact")
 
         # --- Prepare data ---
         peril_data = filtered_data.groupby('event_type').agg({
@@ -410,7 +410,7 @@ def render_q4_peril_analyses(filtered_data: pd.DataFrame, premium_by_peril: pd.D
 def render_q5_growth_and_insights(filtered_data: pd.DataFrame, portfolio: pd.DataFrame, year_range: tuple, peril_coverage: str):
     col2 = st.container()  # maintain layout similar to original
     with col2:
-        st.subheader("Q5: Where Are Our Safest Markets for Profitable Growth?")
+        st.subheader("Where Are Our Safest Markets for Profitable Growth?")
         growth_data = filtered_data.groupby('country').agg({
             'event_id': 'count',
             'severity': 'mean',

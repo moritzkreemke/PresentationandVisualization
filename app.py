@@ -10,9 +10,10 @@ import plotly.express as px
 import plotly.graph_objects as go
 import pydeck as pdk
 
+st.set_page_config(page_title="EuroShield Climate Dashboard", layout="wide")
 
 def render_q1_map(filtered_data: pd.DataFrame, portfolio: pd.DataFrame, country_centroids: dict):
-    """Render interactive Folium map with clickable bubbles and PyDeck-style legends"""
+    """Render Folium map con legenda e metriche a destra, tutte affiancate"""
 
     # --- Data preparation ---
     map_data = filtered_data.groupby('country').agg({
@@ -34,17 +35,14 @@ def render_q1_map(filtered_data: pd.DataFrame, portfolio: pd.DataFrame, country_
     map_data = map_data.dropna(subset=['lat', 'lon'])
 
     if len(map_data) > 0:
-        # Use columns for layout: map on one side, legends on the other
-        col1, col2 = st.columns([4, 1])
+        # Tre colonne: Mappa | Legenda | Metriche
+        col_map, col_legend, col_metrics = st.columns([3, 1, 1])
 
-        with col1:
-            # --- Folium Map Creation ---
+        # --- Mappa ---
+        with col_map:
             m = folium.Map(location=[54, 10], zoom_start=4, tiles="cartodbpositron")
-
-            # Bubble sizes in meters
-            min_radius_meters = 20000  # 20 km
-            max_radius_meters = 150000  # 150 km
-
+            min_radius_meters = 20000
+            max_radius_meters = 150000
             max_tiv = map_data['total_insured_value_eur_billion'].max()
             min_tiv = map_data['total_insured_value_eur_billion'].min()
 
@@ -52,18 +50,13 @@ def render_q1_map(filtered_data: pd.DataFrame, portfolio: pd.DataFrame, country_
                 map_data['radius_meters'] = (min_radius_meters + max_radius_meters) / 2
             else:
                 map_data['radius_meters'] = map_data['total_insured_value_eur_billion'].apply(
-                    lambda tiv: min_radius_meters + ((tiv - min_tiv) / (max_tiv - min_tiv)) * (
-                            max_radius_meters - min_radius_meters)
+                    lambda tiv: min_radius_meters + ((tiv - min_tiv) / (max_tiv - min_tiv)) * (max_radius_meters - min_radius_meters)
                 )
 
-            # Normalize color by severity
             sev = map_data['average_severity']
-            sev_min = sev.min()
-            sev_max = sev.max()
-
-            # Handle case where all severities are the same
+            sev_min, sev_max = sev.min(), sev.max()
             if sev_max == sev_min:
-                map_data['color'] = '#FFA500'  # Orange for uniform severity
+                map_data['color'] = '#FFA500'
             else:
                 sev_norm = (sev - sev_min) / (sev_max - sev_min)
                 map_data['r'] = (255 - (sev_norm * 105)).astype(int).clip(0, 255)
@@ -71,7 +64,6 @@ def render_q1_map(filtered_data: pd.DataFrame, portfolio: pd.DataFrame, country_
                 map_data['b'] = (125 - (sev_norm * 125)).astype(int).clip(0, 255)
                 map_data['color'] = map_data.apply(lambda row: f"#{row['r']:02x}{row['g']:02x}{row['b']:02x}", axis=1)
 
-            # Add bubbles
             for _, row in map_data.iterrows():
                 tooltip_html = f"""
                 <div style="font-family: Arial, sans-serif; font-size: 12px; min-width: 250px;">
@@ -91,7 +83,6 @@ def render_q1_map(filtered_data: pd.DataFrame, portfolio: pd.DataFrame, country_
                     Market Share: <b>{row['market_share_percent']:.1f}%</b>
                 </div>
                 """
-
                 folium.Circle(
                     location=[row['lat'], row['lon']],
                     radius=row['radius_meters'],
@@ -104,69 +95,63 @@ def render_q1_map(filtered_data: pd.DataFrame, portfolio: pd.DataFrame, country_
                     tooltip=tooltip_html
                 ).add_to(m)
 
-            map_output = st_folium(m, width='100%', height=350)
+            st_folium(m, width='100%', height=300)  # mappa più stretta
 
-        with col2:
-            # --- Legend for BUBBLE SIZE: Total Insured Value ---
-            st.markdown("**Bubble size**: Total Insured Value")
-
-            max_val = map_data['total_insured_value_eur_billion'].max()
-            min_val = map_data['total_insured_value_eur_billion'].min()
-
-            legend_values = [
-                max_val,
-                max_val / 2,
-                min_val if min_val > 0 else 0.1
-            ]
-
+        # --- Legenda ---
+        with col_legend:
+            st.markdown("**Bubble size**", unsafe_allow_html=True)
+            legend_values = [max_val := map_data['total_insured_value_eur_billion'].max(),
+                             max_val/2,
+                             min_val := map_data['total_insured_value_eur_billion'].min() if map_data['total_insured_value_eur_billion'].min()>0 else 0.1]
             legend_values.sort(reverse=True)
 
             for val in legend_values:
-                # Calculate radius for this specific value
-                if max_tiv == min_tiv:
-                    display_radius = (min_radius_meters + max_radius_meters) / 2
-                else:
-                    display_radius = min_radius_meters + ((val - min_tiv) / (max_tiv - min_tiv)) * (
-                            max_radius_meters - min_radius_meters)
-
-                # Scale for display in Streamlit
+                display_radius = min_radius_meters + ((val - min_tiv) / (max_tiv - min_tiv)) * (max_radius_meters - min_radius_meters) if max_tiv != min_tiv else (min_radius_meters + max_radius_meters)/2
                 display_size_svg = max(5, int(display_radius / 7000))
-
                 st.markdown(f"""
-                    <div style="display: flex; align-items: center; margin-bottom: 5px;">
+                    <div style="display:flex; align-items:center; margin-bottom:3px;">
                         <svg height="{display_size_svg}" width="{display_size_svg}">
-                            <circle cx="{display_size_svg / 2}" cy="{display_size_svg / 2}" r="{display_size_svg / 2}" fill="#808080" />
+                            <circle cx="{display_size_svg/2}" cy="{display_size_svg/2}" r="{display_size_svg/2}" fill="#808080" />
                         </svg>
-                        <span style="margin-left: 10px;">€{val:.1f} Billions</span>
+                        <span style="margin-left:5px;">€{val:.1f}B</span>
                     </div>
                 """, unsafe_allow_html=True)
 
-            st.markdown("---")
-
-            # --- Legend for COLOR: Average Event Severity ---
-            st.markdown("**Color intensity**: Average Event Severity")
-
+            st.markdown("**Color intensity**", unsafe_allow_html=True)
             st.markdown("""
-                <div style="
-                    background: linear-gradient(to right, 
-                        rgb(255, 125, 125),
-                        rgb(150, 0, 0)
-                    );
-                    height: 20px;
-                    width: 100%;
-                    border-radius: 5px;
-                    margin-top: 5px;
-                "></div>
-                <div style="display: flex; justify-content: space-between; font-size: 12px; margin-top: 5px;">
+                <div style="background: linear-gradient(to right, rgb(255,125,125), rgb(150,0,0)); height:12px; width:100%; border-radius:5px; margin-top:2px;"></div>
+                <div style="display:flex; justify-content:space-between; font-size:10px; margin-top:2px;">
                     <span>Low (1/10)</span>
                     <span>High (10/10)</span>
                 </div>
             """, unsafe_allow_html=True)
 
-        # Check if a bubble was clicked
-        if map_output and map_output.get("last_object_clicked_popup"):
-            selected_country = map_output["last_object_clicked_popup"]
-            st.session_state.selected_country = selected_country
+        # --- Metriche ---
+        with col_metrics:
+            def compact_metric(label, value, unit=""):
+                st.markdown(f"""
+                    <div style="padding:3px; border:1px solid #e6e6e6; border-radius:5px; margin-bottom:3px;">
+                        <p style="font-size:0.65rem; color:gray; margin-bottom:0px;">{label}</p>
+                        <p style="font-size:0.85rem; font-weight:bold; color:#1f4788; margin-top:1px;">{value}{unit}</p>
+                    </div>
+                """, unsafe_allow_html=True)
+
+            total_events = len(filtered_data)
+            avg_severity = filtered_data['severity'].mean() if len(filtered_data) > 0 else 0
+            total_impact = filtered_data['economic_impact_million_usd'].sum()
+            total_deaths = filtered_data['Total Deaths'].sum()
+            total_affected = filtered_data['Total Affected'].sum()
+            total_tiv = portfolio['total_insured_value_eur_billion'].sum()
+
+            compact_metric("Total Events", f"{total_events:,}")
+            compact_metric("Avg. Severity", f"{avg_severity:.1f}/10")
+            compact_metric("Economic Impact", f"${total_impact:,.0f}M")
+            compact_metric("Total Deaths", f"{int(total_deaths):,}")
+            compact_metric("People Affected", f"{int(total_affected):,}")
+            compact_metric("EuroShield TIV", f"€{total_tiv:.1f}B")
+
+        if map_output := st.session_state.get("last_object_clicked_popup"):
+            st.session_state.selected_country = map_output
             st.switch_page("pages/2_Deep_Dive.py")
 
         return map_output
@@ -174,7 +159,7 @@ def render_q1_map(filtered_data: pd.DataFrame, portfolio: pd.DataFrame, country_
         st.warning("No data available for the selected filters.")
         return None
 
-
+# --- Custom color map ---
 CUSTOM_COLOR_MAP = {
     "Drought": "yellow",
     "Earthquake": "limegreen",
@@ -189,11 +174,15 @@ CUSTOM_COLOR_MAP = {
     "Storm": "teal"
 }
 
+
+
+
+
 def render_q2_q3_seasonal_and_trend(filtered_data: pd.DataFrame, year_range: tuple):
     col1, col2 = st.columns(2)
 
     with col1:
-        st.subheader("Q2: When Should We Prepare for Seasonal Surges?")
+        st.subheader("When Should We Prepare for Seasonal Surges?")
 
         key_events = ['Flood', 'Heatwave', 'Wildfire', 'Drought', 'Hurricane']
         seasonal_data = filtered_data[filtered_data['event_type'].isin(key_events)]
@@ -279,7 +268,7 @@ def render_q2_q3_seasonal_and_trend(filtered_data: pd.DataFrame, year_range: tup
 
 
     with col2:
-        st.subheader("Q3: Are Key Perils Becoming More Frequent or Costly?")
+        st.subheader("Are Key Perils Becoming More Frequent or Costly?")
 
         yearly_trends = filtered_data.groupby('year').agg({
             'event_id': 'count',
@@ -333,7 +322,7 @@ def render_q2_q3_seasonal_and_trend(filtered_data: pd.DataFrame, year_range: tup
 
 
 def render_q4_peril_analyses(filtered_data: pd.DataFrame, premium_by_peril: pd.DataFrame):
-    st.subheader("Q4: Disaster Risk Profile: Frequency vs. Impact")
+    st.subheader("Disaster Risk Profile: Frequency vs. Impact")
 
     peril_data = filtered_data.groupby('event_type').agg({
         'severity': 'mean',
@@ -419,7 +408,7 @@ def render_q4_peril_analyses(filtered_data: pd.DataFrame, premium_by_peril: pd.D
 
 def render_q5_growth_and_insights(filtered_data: pd.DataFrame, portfolio: pd.DataFrame, year_range: tuple,
                                   peril_coverage: str):
-    st.subheader("Q5: Where Are Our Safest Markets for Profitable Growth?")
+    st.subheader("Where Are Our Safest Markets for Profitable Growth?")
 
     growth_data = filtered_data.groupby('country').agg({
         'event_id': 'count',
@@ -578,143 +567,97 @@ st.markdown(
 # Q1: WHERE ARE OUR GREATEST FINANCIAL RISKS FROM CLIMATE EVENTS?
 # ============================================================================
 
-col_map, col_filters = st.columns([4, 1])
+# --- LOAD DATA ---
+data, portfolio, premium_by_peril, merged_data = load_data()
 
-with col_filters:
-    data, portfolio, premium_by_peril, merged_data = load_data()
+# --- Initialize session state for filters ---
+if 'selected_peril' not in st.session_state:
+    st.session_state.selected_peril = "All Perils"
+if 'selected_month' not in st.session_state:
+    st.session_state.selected_month = None
 
-    # Initialize session state for filters
-    if 'selected_peril' not in st.session_state:
-        st.session_state.selected_peril = "All Perils"
-    if 'selected_month' not in st.session_state:
-        st.session_state.selected_month = None
+# --- Filter setup ---
+covered_perils = ['Flood', 'Wildfire', 'Hurricane', 'Heatwave', 'Coldwave', 'Storm']
+uncovered_perils = ['Earthquake', 'Drought', 'Landslide', 'Volcanic']
+available_years = sorted(data['year'].dropna().unique())
+min_year = int(available_years[0]) if len(available_years) > 0 else 1950
+max_year = int(available_years[-1]) if len(available_years) > 0 else 2025
 
-    # Get available years from data
-    available_years = sorted(data['year'].dropna().unique())
-    min_year = int(available_years[0]) if len(available_years) > 0 else 1950
-    max_year = int(available_years[-1]) if len(available_years) > 0 else 2025
+# ============================================================================
+# FILTER BAR
+# ============================================================================
+st.markdown("<h4 style='margin-bottom:0.3rem;'>Filters</h4>", unsafe_allow_html=True)
 
-    st.subheader("Filter Events")
-    covered_perils = ['Flood', 'Wildfire', 'Hurricane', 'Heatwave', 'Coldwave', 'Storm']
-    uncovered_perils = ['Earthquake', 'Drought', 'Landslide', 'Volcanic']
+col1, col2, col3 = st.columns([1.2, 1.2, 0.6])
 
+with col1:
     peril_coverage = st.selectbox(
         "Peril Coverage",
         ["All Perils", "Covered Perils", "Uncovered Perils"],
-        key="peril_coverage"
+        key="peril_coverage",
+        label_visibility="collapsed"
     )
-    european_countries = ["All Europe"] + sorted(portfolio['country'].tolist())
 
+with col2:
     year_range = st.select_slider(
         "Year Range",
         options=list(range(min_year, max_year + 1)),
-        value=(min_year, max_year)
+        value=(min_year, max_year),
+        label_visibility="collapsed"
     )
-    if st.button("🔄 Reset All", use_container_width=True):
+
+with col3:
+    if st.button("🔄 Reset", use_container_width=True):
         st.session_state.selected_peril = "All Perils"
         st.session_state.selected_month = None
         st.rerun()
 
-    # Breadcrumb trail
-    breadcrumbs = []
-    if st.session_state.selected_peril != "All Perils":
-        breadcrumbs.append(st.session_state.selected_peril)
-    if st.session_state.selected_month:
-        breadcrumbs.append(f"Month {st.session_state.selected_month}")
+# --- Breadcrumb trail (info line) ---
+breadcrumbs = []
+if st.session_state.selected_peril != "All Perils":
+    breadcrumbs.append(st.session_state.selected_peril)
+if st.session_state.selected_month:
+    breadcrumbs.append(f"Month {st.session_state.selected_month}")
 
-    if breadcrumbs:
-        st.info(f"**Active Filters:** {' > '.join(breadcrumbs)}")
+if breadcrumbs:
+    st.markdown(f"<p style='font-size:0.8rem; color:gray;'>Active Filters: {' > '.join(breadcrumbs)}</p>", unsafe_allow_html=True)
 
-    # Apply filters to data
-    filtered_data = merged_data.copy()
+# ============================================================================
+# APPLY FILTERS
+# ============================================================================
+filtered_data = merged_data.copy()
 
-    # Filter by year range
-    filtered_data = filtered_data[(filtered_data['year'] >= year_range[0]) & (filtered_data['year'] <= year_range[1])]
+# Year filter
+filtered_data = filtered_data[
+    (filtered_data['year'] >= year_range[0]) &
+    (filtered_data['year'] <= year_range[1])
+]
 
-    # Filter by peril coverage
-    if peril_coverage == "Covered Perils":
-        filtered_data = filtered_data[filtered_data['event_type'].isin(covered_perils)]
-    elif peril_coverage == "Uncovered Perils":
-        filtered_data = filtered_data[filtered_data['event_type'].isin(uncovered_perils)]
+# Peril coverage filter
+if peril_coverage == "Covered Perils":
+    filtered_data = filtered_data[filtered_data['event_type'].isin(covered_perils)]
+elif peril_coverage == "Uncovered Perils":
+    filtered_data = filtered_data[filtered_data['event_type'].isin(uncovered_perils)]
 
-    # Filter by specific peril
-    if st.session_state.selected_peril != "All Perils":
-        filtered_data = filtered_data[filtered_data['event_type'] == st.session_state.selected_peril]
+# Specific peril filter
+if st.session_state.selected_peril != "All Perils":
+    filtered_data = filtered_data[filtered_data['event_type'] == st.session_state.selected_peril]
 
-    # Filter by month
-    if st.session_state.selected_month:
-        filtered_data = filtered_data[filtered_data['month'] == st.session_state.selected_month]
+# Month filter
+if st.session_state.selected_month:
+    filtered_data = filtered_data[filtered_data['month'] == st.session_state.selected_month]
 
-with col_map:
-    st.header("Q1: Regional Risk Landscape and Portfolio Exposure")
-    render_q1_map(filtered_data, portfolio, country_centroids)
-st.markdown("---")
-
-# Calculate KPIs
-total_events = len(filtered_data)
-avg_severity = filtered_data['severity'].mean() if len(filtered_data) > 0 else 0
-total_impact = filtered_data['economic_impact_million_usd'].sum()
-total_deaths = filtered_data['Total Deaths'].sum()
-total_affected = filtered_data['Total Affected'].sum()
-
-# Always show All Europe portfolio stats
-total_policies = portfolio['policy_count'].sum()
-total_tiv = portfolio['total_insured_value_eur_billion'].sum()
-annual_premium = portfolio['annual_premium_eur_million'].sum()
-market_share = portfolio['market_share_percent'].mean()
-
-# Display KPIs
-st.markdown("""
-    <style>
-    /* --------------------------------- */
-    /* Custom Styling for KPI Boxes */
-    /* --------------------------------- */
-    .metric-box {
-        padding: 10px;
-        border: 1px solid #e6e6e6; /* Light gray border */
-        border-radius: 5px;
-        margin-bottom: 10px;
-        height: 100%;
-        box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.05); /* Subtle shadow */
-    }
-
-    /* --------------------------------- */
-    /* Custom Font Sizing for Labels and Values */
-    /* --------------------------------- */
-    /* Selector for metric values (often changes with Streamlit versions) */
-    .st-emotion-cache-1dl921r, .st-emotion-cache-1s3t14s, .st-emotion-cache-183n41b {
-        font-size: 1.4rem !important; /* Smaller Value Font */
-    }
-    /* Selector for metric labels */
-    .st-emotion-cache-12fmwz8, .st-emotion-cache-10q7q0c {
-        font-size: 0.8rem !important; /* Smaller Label Font */
-    }
-    </style>
-""", unsafe_allow_html=True)
-
-kpi_col1, kpi_col2, kpi_col3, kpi_col4, kpi_col5, kpi_col6 = st.columns(6)
+# ============================================================================
+# MAP
+# ============================================================================
+st.markdown("<h4 style='margin-top:0.8rem;'>Regional Risk Landscape and Portfolio Exposure</h4>", unsafe_allow_html=True)
+render_q1_map(filtered_data, portfolio, country_centroids)
+#st.markdown("---")
 
 
-def custom_metric(col, label, value, unit=""):
-    with col:
-        # Construct the entire HTML structure (box, label, value) as one string
-        html_content = f"""
-                    <div class="metric-box">
-                        <p style='font-size: 0.75rem; color: gray; margin-bottom: 0px;'>{label}</p>
-                        <p style='font-size: 1.4rem; font-weight: bold; color: #1f4788; margin-top: 5px;'>{value}{unit}</p>
-                    </div>
-                """
-        st.markdown(html_content, unsafe_allow_html=True)
 
 
-custom_metric(kpi_col1, "Total Events", f"{total_events:,}")
-custom_metric(kpi_col2, "Avg. Severity", f"{avg_severity:.1f}/10")
-custom_metric(kpi_col3, "Economic Impact", f"${total_impact:,.0f}M")
-custom_metric(kpi_col4, "Total Deaths", f"{int(total_deaths):,}")
-custom_metric(kpi_col5, "People Affected", f"{int(total_affected):,}")
-custom_metric(kpi_col6, "EuroShield TIV", f"€{total_tiv:.1f}B")
 
-st.markdown("---")
 
 # ============================================================================
 # Q2 & Q3: SEASONAL PATTERNS AND TRENDS
