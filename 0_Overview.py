@@ -41,7 +41,7 @@ def render_q1_map(filtered_data: pd.DataFrame, portfolio: pd.DataFrame, country_
 
         # --- Mappa ---
         with col_map:
-            m = folium.Map(location=[54, 10], zoom_start=4, tiles="cartodbpositron")
+            m = folium.Map(location=[54, 10], zoom_start=4, tiles="cartodbpositron", attr="")
             min_radius_meters = 20000
             max_radius_meters = 150000
             max_tiv = map_data['total_insured_value_eur_billion'].max()
@@ -100,6 +100,7 @@ def render_q1_map(filtered_data: pd.DataFrame, portfolio: pd.DataFrame, country_
 
             #
             map_output = st_folium(m, width='100%', height=350)
+            
 
 
         # --- Legend ---
@@ -703,12 +704,7 @@ with tab3:
 
 
 
-# Footer
-st.caption("""
-        📊 **EuroShield Insurance Group** | Climate Risk Analytics Division  
-        Data Source: EM-DAT (Emergency Events Database) - CRED / UCLouvain, Brussels, Belgium  
-        Dashboard covers historical disaster events across European markets
-        """)
+
 
 # Sidebar with additional info
 with st.sidebar:
