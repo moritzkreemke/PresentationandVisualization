@@ -8,7 +8,6 @@ from data_loader import load_data, country_centroids
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-import pydeck as pdk
 
 st.set_page_config(page_title="EuroShield Climate Dashboard", layout="wide")
 
@@ -242,38 +241,6 @@ def render_q2_q3_seasonal_and_trend(filtered_data: pd.DataFrame, year_range: tup
         if len(monthly_counts) > 0:
             top = monthly_counts.sort_values('count', ascending=False).iloc[0]
             peak_month = month_names[int(top['month']) - 1]
-
-        st.markdown("##### Event Type Distribution")
-        if len(filtered_data) > 0:
-            event_dist = filtered_data['event_type'].value_counts().reset_index()
-            event_dist.columns = ['Event Type', 'Count']
-
-            custom_color_map = {
-                "Drought": "yellow",
-                "Earthquake": "limegreen",
-                "Epidemic": "hotpink",
-                "Flood": "blue",
-                "Glacial Lake Outburst Flood": "aqua",
-                "Heatwave": "darkorange",
-                "Hurricane": "darkorchid",
-                "Landslide": "slategray",
-                "Volcanic": "red",
-                "Wildfire": "brown"
-            }
-
-            fig_pie = px.pie(
-                event_dist,
-                values='Count',
-                names='Event Type',
-                title='',
-                hole=0.4,
-                color='Event Type',
-                color_discrete_map=custom_color_map
-            )
-            fig_pie.update_layout(height=200, showlegend=True, margin=dict(t=0, b=0, l=0, r=0))
-            st.plotly_chart(fig_pie, width='stretch')
-        else:
-            st.info("No data available")
 
     with col2:
         st.subheader("Are Key Perils Becoming More Frequent or Costly?")
@@ -524,18 +491,37 @@ def additional_insights_render(iltered_data: pd.DataFrame, portfolio: pd.DataFra
             st.plotly_chart(fig_corr1, width='stretch')
 
     with col2:
-        if 'duration_days' in filtered_data.columns and len(filtered_data) > 5:
-            fig_corr2 = px.scatter(
-                filtered_data[filtered_data['duration_days'] > 0],
-                x='duration_days',
-                y='Total Affected',
-                color='event_type',
-                title='Event Duration vs. People Affected',
-                labels={'duration_days': 'Duration (days)', 'Total Affected': 'People Affected'},
-                trendline="ols"
+        st.markdown("##### Event Type Distribution")
+        if len(filtered_data) > 0:
+            event_dist = filtered_data['event_type'].value_counts().reset_index()
+            event_dist.columns = ['Event Type', 'Count']
+
+            custom_color_map = {
+                "Drought": "yellow",
+                "Earthquake": "limegreen",
+                "Epidemic": "hotpink",
+                "Flood": "blue",
+                "Glacial Lake Outburst Flood": "aqua",
+                "Heatwave": "darkorange",
+                "Hurricane": "darkorchid",
+                "Landslide": "slategray",
+                "Volcanic": "red",
+                "Wildfire": "brown"
+            }
+
+            fig_pie = px.pie(
+                event_dist,
+                values='Count',
+                names='Event Type',
+                title='',
+                hole=0.4,
+                color='Event Type',
+                color_discrete_map=custom_color_map
             )
-            fig_corr2.update_layout(height=350)
-            st.plotly_chart(fig_corr2, width='stretch')  # Modificato in use_container_width
+            fig_pie.update_layout(height=200, showlegend=True, margin=dict(t=0, b=0, l=0, r=0))
+            st.plotly_chart(fig_pie, width='stretch')
+        else:
+            st.info("No data available")
 
 
 # Set page configuration

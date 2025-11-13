@@ -1,9 +1,6 @@
 import streamlit as st
-from datetime import datetime
 import pandas as pd
-import plotly.express as px
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots
 
 from data_loader import load_data
 
@@ -17,11 +14,6 @@ def render_country_deep_dive(data: pd.DataFrame, portfolio: pd.DataFrame, premiu
                              selected_country: str):
     """Render the country deep dive page with detailed analysis."""
 
-    # ====================
-    # IMPROVED HEADER SECTION
-    # ====================
-
-    # Back button with improved styling
     col_back, col_header = st.columns([1, 11])
     with col_back:
         if st.button("← Back", type="secondary", width='stretch'):
@@ -40,10 +32,6 @@ def render_country_deep_dive(data: pd.DataFrame, portfolio: pd.DataFrame, premiu
     if len(df_country) == 0:
         st.warning(f"No disaster data available for {selected_country}")
         return
-
-    # ====================
-    # CALCULATE ALL METRICS FIRST
-    # ====================
 
     # Peril metrics
     peril_freq = df_country['event_type'].value_counts()
@@ -65,17 +53,11 @@ def render_country_deep_dive(data: pd.DataFrame, portfolio: pd.DataFrame, premiu
         recent_decade = decade_counts.iloc[-1]
         previous_decade = decade_counts.iloc[-2]
         trend_pct = ((recent_decade - previous_decade) / previous_decade * 100) if previous_decade > 0 else 0
-        trend_direction = "↗" if trend_pct > 0 else "↘" if trend_pct < 0 else "→"
     else:
         trend_pct = 0
-        trend_direction = "→"
 
     # Extract month for seasonal analysis
     df_country['month'] = pd.to_datetime(df_country['date']).dt.month
-
-    # ====================
-    # NEW LAYOUT: HEATMAP LEFT, METRICS RIGHT
-    # ====================
 
     # Create two columns: 60% for heatmap, 40% for metrics
     col_heatmap, col_metrics = st.columns([4, 1])
@@ -305,9 +287,6 @@ if 'selected_country' not in st.session_state or st.session_state.selected_count
     if st.button("← Go to Overview"):
         st.switch_page("pages/1_Overview.py")
     st.stop()
-
-# Header
-
 
 # Render the deep dive analysis
 render_country_deep_dive(data, portfolio, premium_by_peril, st.session_state.selected_country)
