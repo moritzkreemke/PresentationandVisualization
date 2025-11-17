@@ -104,7 +104,7 @@ def render_q1_map(filtered_data: pd.DataFrame, portfolio: pd.DataFrame, country_
 
         # --- Legend ---
         with col_legend:
-            st.markdown("**Bubble size**", unsafe_allow_html=True)
+            st.markdown("**Total Insured Value**", unsafe_allow_html=True)
             legend_values = [max_val := map_data['total_insured_value_eur_billion'].max(),
                              max_val / 2,
                              min_val := map_data[
@@ -126,7 +126,7 @@ def render_q1_map(filtered_data: pd.DataFrame, portfolio: pd.DataFrame, country_
                     </div>
                 """, unsafe_allow_html=True)
 
-            st.markdown("**Color intensity**", unsafe_allow_html=True)
+            st.markdown("**Level of Risk per Country**", unsafe_allow_html=True)
             st.markdown("""
                 <div style="background: linear-gradient(to right, rgb(255,125,125), rgb(150,0,0)); height:12px; width:100%; border-radius:5px; margin-top:2px;"></div>
                 <div style="display:flex; justify-content:space-between; font-size:10px; margin-top:2px;">
